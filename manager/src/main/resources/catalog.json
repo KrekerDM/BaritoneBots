@@ -1,0 +1,143 @@
+{
+  "tasks": [
+    {"type": "goto", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "x", "type": "int", "required": true},
+      {"name": "z", "type": "int", "required": true},
+      {"name": "y", "type": "int", "required": false},
+      {"name": "range", "type": "int", "required": false, "default": 2, "min": 0, "max": 64, "unit": "blocks"}
+    ]},
+    {"type": "goto_player", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "player", "type": "player", "required": true},
+      {"name": "range", "type": "int", "required": false, "default": 3, "min": 0, "max": 64, "unit": "blocks"}
+    ]},
+    {"type": "follow", "continuous": true, "heavy": false, "supported": true, "args": [
+      {"name": "player", "type": "player", "required": true},
+      {"name": "radius", "type": "int", "required": false, "default": 3, "min": 1, "max": 64, "unit": "blocks"}
+    ]},
+    {"type": "explore", "continuous": true, "heavy": true, "supported": true, "args": [
+      {"name": "x", "type": "int", "required": false},
+      {"name": "z", "type": "int", "required": false}
+    ]},
+    {"type": "baritone", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "command", "type": "text", "required": true}
+    ]},
+    {"type": "mine", "continuous": false, "heavy": true, "supported": true, "args": [
+      {"name": "blocks", "type": "ids", "required": true},
+      {"name": "amount", "type": "int", "required": false, "default": 0, "min": 0, "max": 100000, "unit": "items"},
+      {"name": "minY", "type": "int", "required": false, "min": -64, "max": 320},
+      {"name": "maxY", "type": "int", "required": false, "min": -64, "max": 320}
+    ]},
+    {"type": "farm", "continuous": false, "heavy": true, "supported": true, "args": [
+      {"name": "center", "type": "pos", "required": true},
+      {"name": "range", "type": "int", "required": false, "default": 20, "min": 1, "max": 128, "unit": "blocks"},
+      {"name": "durationSec", "type": "int", "required": false, "default": 0, "min": 0, "max": 86400, "unit": "s"}
+    ]},
+    {"type": "selection", "continuous": false, "heavy": true, "supported": true, "args": [
+      {"name": "op", "type": "enum", "required": true, "default": "clear", "enum": ["clear", "fill", "walls", "shell", "replace"], "supportedEnum": ["clear"]},
+      {"name": "box", "type": "box", "required": true},
+      {"name": "block", "type": "item", "required": false},
+      {"name": "from", "type": "ids", "required": false}
+    ]},
+    {"type": "build", "continuous": false, "heavy": true, "supported": false, "args": [
+      {"name": "file", "type": "string", "required": true},
+      {"name": "origin", "type": "pos", "required": true},
+      {"name": "rotation", "type": "enum", "required": false, "default": "0", "enum": ["0", "90", "180", "270"]},
+      {"name": "mirror", "type": "enum", "required": false, "default": "none", "enum": ["none", "front_back", "left_right"]},
+      {"name": "box", "type": "box", "required": false},
+      {"name": "name", "type": "string", "required": false}
+    ]},
+    {"type": "collect_drops", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "radius", "type": "int", "required": false, "default": 8, "min": 1, "max": 64, "unit": "blocks"},
+      {"name": "items", "type": "items", "required": false}
+    ]},
+    {"type": "take", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "container", "type": "container", "required": true},
+      {"name": "items", "type": "item_counts", "required": true}
+    ]},
+    {"type": "deposit", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "containers", "type": "containers", "required": true},
+      {"name": "keep", "type": "items", "required": false},
+      {"name": "keepCounts", "type": "item_counts", "required": false},
+      {"name": "only", "type": "items", "required": false}
+    ]},
+    {"type": "transfer", "continuous": false, "heavy": false, "supported": false, "args": [
+      {"name": "from", "type": "container", "required": true},
+      {"name": "to", "type": "containers", "required": true},
+      {"name": "items", "type": "item_counts", "required": true}
+    ]},
+    {"type": "inspect", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "containers", "type": "containers", "required": true}
+    ]},
+    {"type": "equip", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "armor", "type": "bool", "required": false, "default": true},
+      {"name": "offhand", "type": "item", "required": false}
+    ]},
+    {"type": "drop", "continuous": false, "heavy": false, "supported": false, "args": [
+      {"name": "items", "type": "item_counts", "required": true}
+    ]},
+    {"type": "craft", "continuous": false, "heavy": false, "supported": false, "args": [
+      {"name": "item", "type": "item", "required": true},
+      {"name": "count", "type": "int", "required": false, "default": 1, "min": 1, "max": 2304, "unit": "items"},
+      {"name": "table", "type": "container", "required": false},
+      {"name": "grid", "type": "text", "required": false}
+    ]},
+    {"type": "smelt_load", "continuous": false, "heavy": false, "supported": false, "args": [
+      {"name": "furnace", "type": "container", "required": true},
+      {"name": "input", "type": "item", "required": true},
+      {"name": "count", "type": "int", "required": true, "min": 1, "max": 64, "unit": "items"},
+      {"name": "fuel", "type": "item", "required": true},
+      {"name": "fuelCount", "type": "int", "required": true, "min": 0, "max": 64, "unit": "items"}
+    ]},
+    {"type": "smelt_collect", "continuous": false, "heavy": false, "supported": false, "args": [
+      {"name": "furnace", "type": "container", "required": true},
+      {"name": "all", "type": "bool", "required": false, "default": false}
+    ]},
+    {"type": "breed", "continuous": false, "heavy": false, "supported": false, "args": [
+      {"name": "box", "type": "box", "required": true},
+      {"name": "animal", "type": "string", "required": true},
+      {"name": "food", "type": "item", "required": false},
+      {"name": "max", "type": "int", "required": false, "default": 20, "min": 2, "max": 500, "unit": "animals"}
+    ]},
+    {"type": "slaughter", "continuous": false, "heavy": false, "supported": false, "args": [
+      {"name": "box", "type": "box", "required": true},
+      {"name": "animal", "type": "string", "required": true},
+      {"name": "keep", "type": "int", "required": false, "default": 4, "min": 0, "max": 500, "unit": "animals"}
+    ]},
+    {"type": "shear", "continuous": false, "heavy": false, "supported": false, "args": [
+      {"name": "box", "type": "box", "required": true}
+    ]},
+    {"type": "guard", "continuous": true, "heavy": false, "supported": false, "args": [
+      {"name": "center", "type": "pos", "required": true},
+      {"name": "radius", "type": "int", "required": false, "default": 12, "min": 1, "max": 64, "unit": "blocks"}
+    ]},
+    {"type": "attack", "continuous": false, "heavy": false, "supported": false, "args": [
+      {"name": "radius", "type": "int", "required": false, "default": 8, "min": 1, "max": 64, "unit": "blocks"},
+      {"name": "types", "type": "ids", "required": false}
+    ]},
+    {"type": "recover", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "pos", "type": "pos", "required": true},
+      {"name": "dim", "type": "enum", "required": true, "default": "minecraft:overworld", "enum": ["minecraft:overworld", "minecraft:the_nether", "minecraft:the_end"]},
+      {"name": "radius", "type": "int", "required": false, "default": 6, "min": 1, "max": 32, "unit": "blocks"}
+    ]},
+    {"type": "eat", "continuous": false, "heavy": false, "supported": true, "args": []},
+    {"type": "idle", "continuous": false, "heavy": false, "supported": true, "args": []}
+  ],
+  "managerSteps": [
+    {"step": "kit", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "kitId", "type": "string", "required": true}
+    ]},
+    {"step": "deposit_storage", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "keep", "type": "items", "required": false}
+    ]},
+    {"step": "home", "continuous": false, "heavy": false, "supported": true, "args": []},
+    {"step": "wait", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "sec", "type": "int", "required": true, "default": 10, "min": 1, "max": 86400, "unit": "s"}
+    ]},
+    {"step": "goto_waypoint", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "name", "type": "string", "required": true}
+    ]},
+    {"step": "sort_storage", "continuous": false, "heavy": false, "supported": false, "args": []},
+    {"step": "smelt_all", "continuous": false, "heavy": false, "supported": false, "args": []}
+  ],
+  "roles": ["builder", "miner", "lumberjack", "farmer", "smelter", "crafter", "sorter", "rancher", "hauler", "guard"]
+}

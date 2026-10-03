@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="referrer" content="no-referrer" />
+    <title>BaritoneBots</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="app.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+
+  <body>
+    <a class="skip" href="#view" data-i18n="ui.skip">К содержимому</a>
+
+    <header class="top">
+      <div class="wrap">
+        <a class="brand" href="#/bots">BaritoneBots</a>
+        <nav class="nav" id="nav" aria-label="Разделы" data-i18n-aria="ui.nav">
+          <a href="#/bots" data-route="bots" data-i18n="nav.bots">Боты</a>
+          <a href="#/scenarios" data-route="scenarios" data-i18n="nav.scenarios">Сценарии</a>
+          <a href="#/projects" data-route="projects" data-i18n="nav.projects">Проекты</a>
+          <a href="#/world" data-route="world" data-i18n="nav.world">Мир</a>
+          <a href="#/kits" data-route="kits" data-i18n="nav.kits">Наборы</a>
+          <a href="#/settings" data-route="settings" data-i18n="nav.settings">Настройки</a>
+          <a href="#/events" data-route="events" data-i18n="nav.events">События</a>
+        </nav>
+        <div class="conn row-sm" id="conn" data-state="connecting">
+          <span class="conn-state" id="conn-state" role="status">SSE</span>
+          <span id="conn-detail" class="num"></span>
+          <span id="conn-action"></span>
+        </div>
+        <div class="lang" role="group" aria-label="Язык / Language">
+          <button type="button" data-lang="ru" aria-pressed="true">RU</button>
+          <button type="button" data-lang="en" aria-pressed="false">EN</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="view" class="wrap" tabindex="-1">
+      <div class="stack">
+        <h1 class="h1">BaritoneBots</h1>
+        <p class="prose">
+          Панель управления ботами. Работает в браузере с JavaScript; без него
+          доступен только HTTP API менеджера по адресу /api.
+        </p>
+        <p class="prose" lang="en">
+          Bot control panel. It needs JavaScript; without it only the manager
+          HTTP API at /api is available.
+        </p>
+      </div>
+    </main>
+
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+  </body>
+</html>

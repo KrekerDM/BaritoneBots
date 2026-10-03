@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "baritonebots",
+  "version": "${version}",
+  "name": "BaritoneBots",
+  "description": "Bot client side of BaritoneBots: runs tasks with Baritone and reports to the BaritoneBots manager over a local TCP link.",
+  "authors": ["KrekerDM"],
+  "contact": {
+    "homepage": "https://github.com/KrekerDM/BaritoneBots",
+    "sources": "https://github.com/KrekerDM/BaritoneBots",
+    "issues": "https://github.com/KrekerDM/BaritoneBots/issues"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["io.github.krekerdm.baritonebots.mod.BaritoneBotsMod"]
+  },
+  "mixins": ["baritonebots.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.2",
+    "java": ">=25",
+    "fabric-api": "*",
+    "baritone": "*"
+  }
+}
