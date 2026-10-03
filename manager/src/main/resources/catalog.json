@@ -33,7 +33,7 @@
       {"name": "durationSec", "type": "int", "required": false, "default": 0, "min": 0, "max": 86400, "unit": "s"}
     ]},
     {"type": "selection", "continuous": false, "heavy": true, "supported": true, "args": [
-      {"name": "op", "type": "enum", "required": true, "default": "clear", "enum": ["clear", "fill", "walls", "shell", "replace"], "supportedEnum": ["clear"]},
+      {"name": "op", "type": "enum", "required": true, "default": "clear", "enum": ["clear", "fill", "walls", "shell", "replace"]},
       {"name": "box", "type": "box", "required": true},
       {"name": "block", "type": "item", "required": false},
       {"name": "from", "type": "ids", "required": false}
@@ -60,7 +60,7 @@
       {"name": "keepCounts", "type": "item_counts", "required": false},
       {"name": "only", "type": "items", "required": false}
     ]},
-    {"type": "transfer", "continuous": false, "heavy": false, "supported": false, "args": [
+    {"type": "transfer", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "from", "type": "container", "required": true},
       {"name": "to", "type": "containers", "required": true},
       {"name": "items", "type": "item_counts", "required": true}
@@ -72,23 +72,23 @@
       {"name": "armor", "type": "bool", "required": false, "default": true},
       {"name": "offhand", "type": "item", "required": false}
     ]},
-    {"type": "drop", "continuous": false, "heavy": false, "supported": false, "args": [
+    {"type": "drop", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "items", "type": "item_counts", "required": true}
     ]},
-    {"type": "craft", "continuous": false, "heavy": false, "supported": false, "args": [
+    {"type": "craft", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "item", "type": "item", "required": true},
       {"name": "count", "type": "int", "required": false, "default": 1, "min": 1, "max": 2304, "unit": "items"},
       {"name": "table", "type": "container", "required": false},
       {"name": "grid", "type": "text", "required": false}
     ]},
-    {"type": "smelt_load", "continuous": false, "heavy": false, "supported": false, "args": [
+    {"type": "smelt_load", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "furnace", "type": "container", "required": true},
       {"name": "input", "type": "item", "required": true},
       {"name": "count", "type": "int", "required": true, "min": 1, "max": 64, "unit": "items"},
       {"name": "fuel", "type": "item", "required": true},
       {"name": "fuelCount", "type": "int", "required": true, "min": 0, "max": 64, "unit": "items"}
     ]},
-    {"type": "smelt_collect", "continuous": false, "heavy": false, "supported": false, "args": [
+    {"type": "smelt_collect", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "furnace", "type": "container", "required": true},
       {"name": "all", "type": "bool", "required": false, "default": false}
     ]},
@@ -106,11 +106,11 @@
     {"type": "shear", "continuous": false, "heavy": false, "supported": false, "args": [
       {"name": "box", "type": "box", "required": true}
     ]},
-    {"type": "guard", "continuous": true, "heavy": false, "supported": false, "args": [
+    {"type": "guard", "continuous": true, "heavy": false, "supported": true, "args": [
       {"name": "center", "type": "pos", "required": true},
       {"name": "radius", "type": "int", "required": false, "default": 12, "min": 1, "max": 64, "unit": "blocks"}
     ]},
-    {"type": "attack", "continuous": false, "heavy": false, "supported": false, "args": [
+    {"type": "attack", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "radius", "type": "int", "required": false, "default": 8, "min": 1, "max": 64, "unit": "blocks"},
       {"name": "types", "type": "ids", "required": false}
     ]},

@@ -17,6 +17,8 @@ import java.util.Set;
 public final class PauseProcess implements IBaritoneProcess {
     /** Above every built-in Baritone process (they use {@link IBaritoneProcess#DEFAULT_PRIORITY} or small values). */
     public static final double PRIORITY = 1000;
+    /** Claim-owner suffix of a task that is clicking in the player's own inventory menu. */
+    public static final String INVENTORY_SUFFIX = ":inventory";
 
     private final Set<String> owners = new LinkedHashSet<>();
 
@@ -44,6 +46,19 @@ public final class PauseProcess implements IBaritoneProcess {
 
     public boolean isClaimedBy(String owner) {
         return owners.contains(owner);
+    }
+
+    /**
+     * True while a task clicks in the player's own inventory menu (claim owner ending in {@link #INVENTORY_SUFFIX});
+     * behaviours must not send inventory clicks (food or weapon swaps) in between.
+     */
+    public boolean inventoryBusy() {
+        for (String o : owners) {
+            if (o.endsWith(INVENTORY_SUFFIX)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

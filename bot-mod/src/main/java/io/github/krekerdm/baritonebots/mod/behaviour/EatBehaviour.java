@@ -41,7 +41,7 @@ public final class EatBehaviour {
         BotConfig.AutoEat cfg = bot.config().behaviour().autoEat();
         LocalPlayer p = bot.player();
         if (!cfg.enabled() || !bot.inGame() || p.isDeadOrDying() || p.isCreative() || p.isSpectator()
-                || Interact.containerOpen(p) || bot.ticks() % 10 != 0) {
+                || Interact.containerOpen(p) || bot.pause.inventoryBusy() || bot.ticks() % 10 != 0) {
             return;
         }
         int food = p.getFoodData().getFoodLevel();

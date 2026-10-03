@@ -6,6 +6,7 @@
   "client": [
     "GameRendererMixin",
     "MinecraftMixin",
+    "MultiPlayerGameModeMixin",
     "OptionsMixin",
     "SoundEngineMixin"
   ],

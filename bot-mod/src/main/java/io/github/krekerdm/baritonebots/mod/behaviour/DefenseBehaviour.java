@@ -174,13 +174,17 @@ public final class DefenseBehaviour {
         }
     }
 
-    /** Selects the best hotbar weapon; pulls one from the main inventory at most once per second. */
-    private void equipWeapon(LocalPlayer p) {
+    /**
+     * Selects the best hotbar weapon; pulls one from the main inventory at most once per second. Also used by the
+     * {@code attack}/{@code guard} tasks.
+     */
+    public void equipWeapon(LocalPlayer p) {
         int bestHotbar = Weapons.bestSlot(p, 0, Inv.HOTBAR_SIZE);
         int bestMain = Weapons.bestSlot(p, Inv.HOTBAR_SIZE, Inv.MAIN_SIZE);
         int hotScore = bestHotbar < 0 ? 0 : Weapons.score(p.getInventory().getItem(bestHotbar));
         int mainScore = bestMain < 0 ? 0 : Weapons.score(p.getInventory().getItem(bestMain));
-        if (mainScore > hotScore && Inv.ownMenuOpen(p) && bot.ticks() - lastWeaponSwapTick >= 20) {
+        if (mainScore > hotScore && Inv.ownMenuOpen(p) && !bot.pause.inventoryBusy()
+                && bot.ticks() - lastWeaponSwapTick >= 20) {
             int target = bestHotbar >= 0 ? bestHotbar : p.getInventory().getSelectedSlot();
             Inv.swapWithHotbar(bot.mc, p, bestMain, target);
             lastWeaponSwapTick = bot.ticks();

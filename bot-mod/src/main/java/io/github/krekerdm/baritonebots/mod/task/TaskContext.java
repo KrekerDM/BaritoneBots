@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPos;
 public final class TaskContext {
     private final BotRuntime bot;
     private final TaskSpec spec;
+    private final TaskContext parent;
     private final long startedAtMs = System.currentTimeMillis();
     private int ticks;
     private String step = "starting";
@@ -23,8 +24,14 @@ public final class TaskContext {
     private TaskResult result;
 
     TaskContext(BotRuntime bot, TaskSpec spec) {
+        this(bot, spec, null);
+    }
+
+    /** A {@link SubTask} context: same task id (and pause owner), own result; steps show on the parent. */
+    TaskContext(BotRuntime bot, TaskSpec spec, TaskContext parent) {
         this.bot = bot;
         this.spec = spec;
+        this.parent = parent;
     }
 
     public TaskSpec spec() {
@@ -77,6 +84,9 @@ public final class TaskContext {
 
     /** Updates the step shown in status ({@code progress} 0..1, or -1 for unknown). */
     public void step(String step, double progress) {
+        if (parent != null) {
+            parent.step(step, progress);
+        }
         boolean changed = !step.equals(this.step);
         this.step = step;
         this.progress = progress;

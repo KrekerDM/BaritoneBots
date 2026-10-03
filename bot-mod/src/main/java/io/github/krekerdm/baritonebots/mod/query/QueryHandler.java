@@ -15,6 +15,7 @@ import io.github.krekerdm.baritonebots.mod.ModInfo;
 import io.github.krekerdm.baritonebots.mod.util.Inv;
 import io.github.krekerdm.baritonebots.mod.util.McIds;
 import io.github.krekerdm.baritonebots.mod.util.Positions;
+import io.github.krekerdm.baritonebots.mod.util.Recipes;
 import io.github.krekerdm.baritonebots.common.geom.Pos;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
@@ -37,7 +38,7 @@ import java.util.Set;
 
 /**
  * Answers {@code query} messages (SPEC §2.4) on the client thread. Implemented: inventory, entities, player,
- * block_at, containers_nearby. Other kinds (bom, progress, recipe_book) answer {@code ok:false, error:"unsupported"}.
+ * block_at, containers_nearby, recipe_book. Other kinds (bom, progress) answer {@code ok:false, error:"unsupported"}.
  */
 public final class QueryHandler {
     private static final int MAX_RADIUS = 128;
@@ -75,7 +76,7 @@ public final class QueryHandler {
         }
         boolean needsGame = switch (kind) {
             case QueryKinds.INVENTORY, QueryKinds.ENTITIES, QueryKinds.PLAYER, QueryKinds.BLOCK_AT,
-                 QueryKinds.CONTAINERS_NEARBY -> true;
+                 QueryKinds.CONTAINERS_NEARBY, QueryKinds.RECIPE_BOOK -> true;
             default -> false;
         };
         if (!needsGame) {
@@ -90,6 +91,7 @@ public final class QueryHandler {
             case QueryKinds.PLAYER -> QueryResult.success(player(args));
             case QueryKinds.BLOCK_AT -> blockAt(args);
             case QueryKinds.CONTAINERS_NEARBY -> QueryResult.success(containersNearby(args));
+            case QueryKinds.RECIPE_BOOK -> recipeBook(args);
             default -> QueryResult.failure("unsupported");
         };
     }
@@ -173,6 +175,19 @@ public final class QueryHandler {
             return QueryResult.success(Json.obj("block", null, "loaded", false));
         }
         return QueryResult.success(Json.obj("block", McIds.state(level.getBlockState(bp)), "loaded", true));
+    }
+
+    /** {@code recipe_book {item}}: known crafting recipes for the item; {@code craftingTable} = needs the 3×3 grid. */
+    private QueryResult recipeBook(JsonObject args) {
+        String item = Json.getString(args, "item", "");
+        if (item.isBlank()) {
+            return QueryResult.failure("bad_args: item required");
+        }
+        JsonArray out = new JsonArray();
+        for (Recipes.Option o : Recipes.forItem(bot.player(), bot.level(), Ids.normalize(item.trim()))) {
+            out.add(Json.obj("displayId", o.displayId(), "craftingTable", o.needsTable(), "count", o.perCraft()));
+        }
+        return QueryResult.success(Json.obj("recipes", out));
     }
 
     private JsonObject containersNearby(JsonObject args) {

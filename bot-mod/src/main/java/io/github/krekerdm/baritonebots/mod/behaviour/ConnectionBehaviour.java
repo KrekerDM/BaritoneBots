@@ -88,6 +88,7 @@ public final class ConnectionBehaviour {
         Minecraft mc = bot.mc;
         if (leftFlag) {
             leftFlag = false;
+            bot.companion.onLeave();
             if (joined) {
                 joined = false;
                 bot.tasks.onDisconnected();

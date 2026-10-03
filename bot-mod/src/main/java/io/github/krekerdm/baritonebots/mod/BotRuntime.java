@@ -27,6 +27,7 @@ import io.github.krekerdm.baritonebots.mod.behaviour.Eater;
 import io.github.krekerdm.baritonebots.mod.behaviour.LifeBehaviour;
 import io.github.krekerdm.baritonebots.mod.behaviour.LoginBehaviour;
 import io.github.krekerdm.baritonebots.mod.behaviour.StatusReporter;
+import io.github.krekerdm.baritonebots.mod.link.CompanionBridge;
 import io.github.krekerdm.baritonebots.mod.link.LinkClient;
 import io.github.krekerdm.baritonebots.mod.lowpower.LowPower;
 import io.github.krekerdm.baritonebots.mod.query.QueryHandler;
@@ -72,6 +73,7 @@ public final class BotRuntime {
     public final StatusReporter status;
     public final TaskManager tasks;
     public final QueryHandler queries;
+    public final CompanionBridge companion;
 
     private final BaritoneSettingsApplier settingsApplier = new BaritoneSettingsApplier();
     private final RateLimiter warnLimiter = new RateLimiter(5, 1000);
@@ -100,6 +102,7 @@ public final class BotRuntime {
         this.status = new StatusReporter(this);
         this.tasks = new TaskManager(this);
         this.queries = new QueryHandler(this);
+        this.companion = new CompanionBridge(this);
     }
 
     /** Creates the runtime, registers Fabric events and starts the link. */
@@ -109,10 +112,14 @@ public final class BotRuntime {
         }
         BotRuntime rt = new BotRuntime(Minecraft.getInstance(), props);
         instance = rt;
+        rt.companion.register();
         ClientTickEvents.END_CLIENT_TICK.register(rt::onEndTick);
         ClientReceiveMessageEvents.GAME.register((message, overlay) -> rt.login.onSystemMessage(message.getString(),
                 overlay));
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> rt.connection.onJoin());
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            rt.connection.onJoin();
+            rt.companion.onJoin();
+        });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> rt.connection.onLeave());
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> rt.link.close(1500));
         ModInfo.LOG.info("BaritoneBots {} will link bot '{}' to {} once the client ticks", ModInfo.modVersion(),
@@ -226,6 +233,7 @@ public final class BotRuntime {
         }
         step("connection", connection::tick);
         step("login", login::tick);
+        step("companion", companion::tick);
         step("life", life::tick);
         step("eat", eat::tick);
         step("defense", defense::tick);
@@ -294,11 +302,8 @@ public final class BotRuntime {
             case MessageTypes.DISCONNECT -> connection.disconnect();
             case MessageTypes.QUIT -> quit();
             case MessageTypes.QUERY -> queries.handle(e);
-            case MessageTypes.PLUGIN -> {
-                if (warnLimiter.once("plugin-bridge", 60_000)) {
-                    log.warn("companion plugin bridge is not implemented in this version; 'plugin' message dropped");
-                }
-            }
+            case MessageTypes.PLUGIN -> companion.fromManager(e.d());
+
             default -> {
                 if (warnLimiter.once("unknown:" + e.t(), 60_000)) {
                     log.warn("ignoring unknown link message type '" + e.t() + "'");
@@ -313,6 +318,7 @@ public final class BotRuntime {
         LowPower.apply(mc, cfg.client());
         login.onConfig(cfg);
         connection.onConfig(cfg);
+        companion.onConfig(cfg);
         status.markDirty();
     }
 

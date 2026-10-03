@@ -31,6 +31,12 @@ dependencies {
 
     compileOnly(files(baritoneJar).builtBy(downloadBaritone))
     implementation(project(":common"))
+
+    // Unit tests cover the pure planning code (mod.task.plan) only; nothing there touches Minecraft.
+    testImplementation(platform("org.junit:junit-bom:5.13.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("com.google.code.gson:gson:${property("gson_version")}")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.processResources {

@@ -41,12 +41,12 @@ class CatalogI18nTest {
         for (String type : TaskTypes.ALL) {
             assertTrue(catalog.isTask(type), "catalog misses " + type);
         }
-        for (String unsupported : List.of("build", "craft", "transfer", "drop", "smelt_load", "smelt_collect", "breed",
-                "slaughter", "shear", "guard", "attack")) {
+        for (String unsupported : List.of("build", "breed", "slaughter", "shear")) {
             assertFalse(catalog.isSupported(unsupported), unsupported + " should be marked unsupported");
         }
         for (String supported : List.of("goto", "goto_player", "follow", "explore", "baritone", "mine", "farm",
-                "selection", "collect_drops", "recover", "eat", "idle", "take", "deposit", "inspect", "equip")) {
+                "selection", "collect_drops", "recover", "eat", "idle", "take", "deposit", "inspect", "equip",
+                "craft", "transfer", "drop", "smelt_load", "smelt_collect", "guard", "attack")) {
             assertTrue(catalog.isSupported(supported), supported + " should be supported");
         }
         assertTrue(catalog.isStep("kit") && catalog.isSupported("kit"));
@@ -120,9 +120,8 @@ class CatalogI18nTest {
         assertEquals(64, args.get("amount").getAsInt());
         JsonObject sel = catalog.normalize("selection", Json.obj("box", Json.obj()));
         assertEquals("clear", sel.get("op").getAsString(), "required args with a default are filled in");
-        TaskCatalog.BadArgsException e = assertThrows(TaskCatalog.BadArgsException.class,
-                () -> catalog.normalize("selection", Json.obj("op", "fill", "box", Json.obj())));
-        assertEquals("unsupported", e.code());
+        JsonObject fill = catalog.normalize("selection", Json.obj("op", "fill", "box", Json.obj(), "block", "stone"));
+        assertEquals("fill", fill.get("op").getAsString(), "every selection op is supported");
         assertThrows(TaskCatalog.BadArgsException.class, () -> catalog.normalize("goto", Json.obj("x", 1)));
         assertThrows(TaskCatalog.BadArgsException.class, () -> catalog.normalize("goto", Json.obj("x", "abc", "z", 1)));
         assertThrows(TaskCatalog.BadArgsException.class, () -> catalog.normalize("nope", new JsonObject()));

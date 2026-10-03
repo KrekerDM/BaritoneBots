@@ -2,8 +2,11 @@ package io.github.krekerdm.baritonebots.mod.task;
 
 import baritone.api.pathing.goals.GoalGetToBlock;
 import io.github.krekerdm.baritonebots.common.msg.Reasons;
+import io.github.krekerdm.baritonebots.mod.baritone.PauseProcess;
 import io.github.krekerdm.baritonebots.mod.behaviour.ContainerSensor;
+import io.github.krekerdm.baritonebots.mod.task.plan.SlotMoves;
 import io.github.krekerdm.baritonebots.mod.util.Interact;
+import io.github.krekerdm.baritonebots.mod.util.Inv;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -11,6 +14,7 @@ import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -18,6 +22,9 @@ import java.util.List;
  * {@code useItemOn}, wait up to {@value #OPEN_WAIT_TICKS} ticks for a non-inventory menu (2 retries), let the
  * contents sync for 3 ticks, then accept clicks (at most 2 per tick through {@link ClickQueue}). Holds the task's
  * pause claim from opening until {@link #close}.
+ * <p>
+ * {@link #playerInventory()} drives the player's own {@code InventoryMenu} (2×2 crafting, dropping) the same way:
+ * any open container is closed, the pause is claimed, and {@link #close} leaves the inventory menu alone.
  */
 public final class ContainerSession {
     public enum Phase { PATH, OPEN, WAIT, SETTLE, READY, CLOSED, FAILED }
@@ -27,6 +34,7 @@ public final class ContainerSession {
     private static final int SETTLE_TICKS = 3;
 
     private final BlockPos pos;
+    private final boolean ownInventory;
     private final ClickQueue clicks = new ClickQueue();
     private final PathStep path = new PathStep();
     private boolean pathStarted;
@@ -38,11 +46,27 @@ public final class ContainerSession {
     private String failMessage;
 
     public ContainerSession(BlockPos pos) {
-        this.pos = pos.immutable();
+        this(pos.immutable(), false);
     }
 
+    private ContainerSession(BlockPos pos, boolean ownInventory) {
+        this.pos = pos;
+        this.ownInventory = ownInventory;
+        this.phase = ownInventory ? Phase.OPEN : Phase.PATH;
+    }
+
+    /** A session on the player's own inventory menu (no block, no walking). */
+    public static ContainerSession playerInventory() {
+        return new ContainerSession(null, true);
+    }
+
+    /** Container position, or {@code null} for {@link #playerInventory()}. */
     public BlockPos pos() {
         return pos;
+    }
+
+    public boolean ownInventory() {
+        return ownInventory;
     }
 
     public Phase phase() {
@@ -78,38 +102,69 @@ public final class ContainerSession {
         return ContainerSensor.playerSlots(p, menu);
     }
 
+    /** Player main + hotbar slots of the menu (no armor, offhand or crafting slots). */
+    public List<Slot> mainSlots(LocalPlayer p) {
+        List<Slot> out = new ArrayList<>();
+        for (Slot s : playerSlots(p)) {
+            if (s.getContainerSlot() < Inv.MAIN_SIZE) {
+                out.add(s);
+            }
+        }
+        return out;
+    }
+
     public void click(Slot slot, int button, ContainerInput input) {
         clicks.add(menu, slot.index, button, input);
     }
 
+    /** Click by menu slot id ({@code -999} = outside the window). */
+    public void click(int slotId, int button, ContainerInput input) {
+        clicks.add(menu, slotId, button, input);
+    }
+
     /**
-     * Moves {@code n} items from {@code from} to the empty slot {@code to} with the fewest clicks: pick up the
-     * stack, then place single items with right clicks either into {@code to} or back into {@code from}.
+     * Moves {@code n} items from {@code from} to {@code to} (empty, or the same item with room for {@code n}) with
+     * the fewest clicks: pick up the stack, then place single items with right clicks either into {@code to} or
+     * back into {@code from} ({@link SlotMoves#partial}).
      */
     public void movePartial(Slot from, Slot to, int n) {
-        ItemStack s = from.getItem();
-        int count = s.getCount();
-        if (n <= 0) {
-            return;
+        for (SlotMoves.Click c : SlotMoves.partial(from.getItem().getCount(), n)) {
+            Slot target = c.target() == SlotMoves.Target.SOURCE ? from : to;
+            clicks.add(menu, target.index, c.button(), ContainerInput.PICKUP);
         }
-        if (n >= count) {
-            clicks.add(menu, from.index, 0, ContainerInput.PICKUP);
-            clicks.add(menu, to.index, 0, ContainerInput.PICKUP);
-            return;
+    }
+
+    /**
+     * Queues a click that puts the cursor stack back into the player's main inventory (a stack of the same item
+     * with room first, else an empty slot). Returns {@code false} when there is nowhere to put it.
+     */
+    public boolean returnCarried(LocalPlayer p) {
+        ItemStack carried = menu.getCarried();
+        if (carried.isEmpty()) {
+            return true;
         }
-        int keep = count - n;
-        clicks.add(menu, from.index, 0, ContainerInput.PICKUP);
-        if (n <= keep) {
-            for (int i = 0; i < n; i++) {
-                clicks.add(menu, to.index, 1, ContainerInput.PICKUP);
+        Slot target = null;
+        for (Slot s : mainSlots(p)) {
+            ItemStack st = s.getItem();
+            if (!st.isEmpty() && ItemStack.isSameItemSameComponents(st, carried)
+                    && st.getCount() + carried.getCount() <= st.getMaxStackSize()) {
+                target = s;
+                break;
             }
-            clicks.add(menu, from.index, 0, ContainerInput.PICKUP);
-        } else {
-            for (int i = 0; i < keep; i++) {
-                clicks.add(menu, from.index, 1, ContainerInput.PICKUP);
-            }
-            clicks.add(menu, to.index, 0, ContainerInput.PICKUP);
         }
+        if (target == null) {
+            for (Slot s : mainSlots(p)) {
+                if (s.getItem().isEmpty()) {
+                    target = s;
+                    break;
+                }
+            }
+        }
+        if (target == null) {
+            return false;
+        }
+        clicks.add(menu, target.index, 0, ContainerInput.PICKUP);
+        return true;
     }
 
     public void tick(TaskContext ctx) {
@@ -172,6 +227,22 @@ public final class ContainerSession {
     }
 
     private void open(TaskContext ctx, LocalPlayer p) {
+        if (ownInventory) {
+            if (ctx.bot().eater.busy()) {
+                ctx.step("waiting for eating to finish", -1);
+                return; // the eater swaps food into the hotbar; start clicking after it
+            }
+            if (Interact.containerOpen(p)) {
+                p.closeContainer();
+            }
+            ctx.bot().pause.claim(ctx.owner());
+            ctx.bot().pause.claim(ctx.owner() + PauseProcess.INVENTORY_SUFFIX); // keeps auto-eat/defense swaps out
+            ctx.mc().options.keyUse.setDown(false);
+            menu = p.inventoryMenu;
+            waitTicks = 0;
+            phase = Phase.SETTLE;
+            return;
+        }
         if (ctx.bot().level() == null || !ctx.bot().level().isLoaded(pos)) {
             fail(Reasons.NOT_FOUND, "container chunk at " + pos.toShortString() + " is not loaded");
             return;
@@ -193,14 +264,18 @@ public final class ContainerSession {
         phase = Phase.WAIT;
     }
 
-    /** Closes the menu (if open) and releases the pause claim so the bot can walk again. */
+    /**
+     * Closes the menu (if open; the player's own inventory menu stays) and releases the pause claim so the bot can
+     * walk again.
+     */
     public void close(TaskContext ctx) {
         clicks.clear();
         LocalPlayer p = ctx.player();
-        if (p != null && menu != null && p.containerMenu == menu) {
+        if (!ownInventory && p != null && menu != null && p.containerMenu == menu) {
             p.closeContainer();
         }
         ctx.bot().pause.release(ctx.owner());
+        ctx.bot().pause.release(ctx.owner() + PauseProcess.INVENTORY_SUFFIX);
         if (phase != Phase.FAILED) {
             phase = Phase.CLOSED;
         }

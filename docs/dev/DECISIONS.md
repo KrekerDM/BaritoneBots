@@ -26,7 +26,7 @@ When regions overlap, a later region's air does not erase an earlier region's bl
 `Ids.matches`: a glob without a namespace is in `minecraft:` (`*_pickaxe` does not match `othermod:steel_pickaxe`; use `*:*_pickaxe`), a lone `*` matches every namespace, and when the glob has no `[...]` the id's block-state suffix is ignored. SPEC §1 only says "matched against the full id after normalisation".
 
 ## mod: MVP scope
-Implemented task types: goto, goto_player, follow, explore, baritone, mine, farm, selection (op `clear` only), collect_drops, recover, eat, idle, take, deposit, inspect, equip. The other §3 types (craft, smelt_load, smelt_collect, breed, slaughter, shear, build, transfer, drop, guard, attack) and selection ops fill/walls/shell/replace finish with `unsupported`. Queries bom, progress and recipe_book answer `ok:false, error:"unsupported"`. `plugin` messages are dropped with a rate-limited `log` warning (companion bridge and protection guard are phase 2).
+(Superseded by "mod: phase 2A scope".) Implemented task types: goto, goto_player, follow, explore, baritone, mine, farm, selection (op `clear` only), collect_drops, recover, eat, idle, take, deposit, inspect, equip. The other §3 types (craft, smelt_load, smelt_collect, breed, slaughter, shear, build, transfer, drop, guard, attack) and selection ops fill/walls/shell/replace finish with `unsupported`. Queries bom, progress and recipe_book answer `ok:false, error:"unsupported"`. `plugin` messages are dropped with a rate-limited `log` warning (companion bridge and protection guard are phase 2).
 
 ## mod: low-power activation
 Before the first config, `ClientOpts.defaults()` apply only when the client was started by the manager (`baritonebots.link` set) or with `-Dbaritonebots.headless=true`; a hand-started client without either is not touched (SPEC "dormant except low-power" would otherwise cap a human's game at 10 fps). The three flags are independent: `lowPower` = forced options + loop cap (headless only), `skipRender` = render skip (headless only), `muteSounds` = sound engine cancel. 26.2 splits `GameRenderer` into `extract` and `render`; both are skipped with one per-frame decision. `SoundEngine#playDelayed` is cancelled too.
@@ -63,7 +63,7 @@ Every task end (success included) releases `task:*` pause claims, closes any ope
 Implemented: everything in SPEC §5/§6 except projects and the automatic planner (`/api/projects*` answers 501 `not_implemented`, the state snapshot has `projects: []`), Microsoft accounts (starting such a bot fails with 400 `unsupported`, `/api/bots/{id}/microsoft-login` answers 501 `unsupported`), the manager steps `sort_storage` and `smelt_all` (fail with `unsupported`), and the companion bridge (`plugin` messages from bots are dropped; `/api/bots/{id}/plugin` still forwards to the bot, which drops it too).
 
 ## manager: catalog flags and early rejection
-`catalog.json` marks each task and manager step with `supported`; the eleven task types the mod answers `unsupported` are `false`. Queueing such a task over HTTP fails at once with 400 `unsupported` instead of reaching the bot. Arguments may carry `supportedEnum` (`selection.op` = `clear` only); other values fail with `bad_args`/`unsupported`. Required arguments that have a catalog default (`selection.op`, `recover.dim`, `wait.sec`) are filled in by the manager, optional ones are left to the executor. Scenario steps are validated when the scenario is saved; unsupported ones fail when they are dispatched and stop the run.
+`catalog.json` marks each task and manager step with `supported`; the task types the mod answers `unsupported` (since phase 2A: build, breed, slaughter, shear) are `false`. Queueing such a task over HTTP fails at once with 400 `unsupported` instead of reaching the bot. Arguments may carry `supportedEnum` (none does since phase 2A: every `selection.op` works); other values fail with `bad_args`/`unsupported`. Required arguments that have a catalog default (`selection.op`, `recover.dim`, `wait.sec`) are filled in by the manager, optional ones are left to the executor. Scenario steps are validated when the scenario is saved; unsupported ones fail when they are dispatched and stop the run.
 
 ## manager: runtime settings beyond SPEC §5.3
 `runtime.mods[]` entries take either `url` (+ optional `sha512`) or `modrinth` (project slug) + `version` (preferred version number). Modrinth builds are looked up with `loaders=["fabric"]` and `game_versions=[minecraftVersion]`; when the preferred version is not listed the newest compatible build is used (logged), and Modrinth's sha512 is verified. Added `runtime.headlessmcSha256` (GitHub digest of 2.10.0, ignored for other versions) and `runtime.fabricInstallerUrl` (installer 1.1.2, written as `hmc.fabric.url`, because HeadlessMC's default installer is 1.0.3). `planner.depositKeep` (globs kept by `deposit_storage`) is new too.
@@ -97,3 +97,35 @@ Every `container` snapshot updates the index; containers the index does not know
 
 ## manager: Windows AF_UNIX temp folder
 Every NIO selector on Windows (JDK HttpServer, HttpClient) opens a loopback pipe through an AF_UNIX socket in the temp folder, whose real path must stay under ~100 characters; redirected temp folders (app containers) break it even when `%TEMP%` looks short. `ManagerMain` therefore sets `jdk.net.unixdomain.tmpdir` to `%USERPROFILE%\.baritonebots-tmp` unless it is already set.
+
+## mod: phase 2A scope
+Added task types craft, smelt_load, smelt_collect, transfer, drop, attack, guard and the selection ops fill/walls/shell/replace; query `recipe_book`; the companion bridge (SPEC §7) and the protection guard. Still `unsupported`: build, breed, slaughter, shear and the queries bom/progress. Pure planning code (`mod.task.plan`) has JUnit tests in `bot-mod/src/test`.
+
+## mod: craft
+* Station: the 2×2 inventory grid when no `table` is given and a known recipe (or the `grid`) fits 2×2; else `table`; else the nearest loaded crafting table within 16 blocks (`not_found` when there is none). No recipe in the book and no `grid` = `not_found`; recipes the client's own material check (`RecipeDisplayEntry.canCraft`) rejects are skipped, and when nothing is left = `missing_materials` before walking anywhere.
+* Exact counts: the recipe book is asked one set at a time (`useMaxItems=false` adds one set to an already placed recipe), "max" only while ≥ 64 crafts remain; the manual grid places exactly `n` per cell. A single `QUICK_MOVE` on the result then never overshoots by more than one craft's yield. Crafts are also capped by the room left for the result (a shift-click drops what does not fit), ending with `data.inventoryFull`.
+* Fewer than `count` but at least one crafted = ok (`data.crafted` < `data.requested`); nothing crafted = `missing_materials`, `inventory_full`, or `bad_args` when the manual grid crafts nothing / something else. Data `{crafted, item, requested, inventoryFull?}`.
+* Grid cells take ids or globs (`*_planks`), not item tags; a JSON string holding the grid is accepted as well. The pattern is moved to the top-left of the crafting grid.
+* `recipe_book` entries add `count` (items per craft).
+
+## mod: smelting
+* `smelt_load` collects the result slot first, then loads input, then fuel. An input slot holding a different item fails with `container_failed` (run `smelt_collect all=true` first); a fuel slot holding a different item skips fuelling (`data.fuelBlocked`). No matching input in the inventory = `missing_materials`; input slot already full = ok with `loaded:0, inputFull:true`. Extra data `input`, `fuelItem`.
+* `smelt_collect` shift-clicks up to 3 rounds; items left after that = `data.inventoryFull`.
+
+## mod: transfer and drop
+* `transfer` deposits only the item ids it took, keeping as many of each as the bot held before the task (`only` + `keepCounts`), so the bot's own stock is not moved. A failing take/deposit fails the transfer with that step's reason. Data merges take (`taken`, `missing`, `inventoryFull`) and deposit (`moved`, `left`, `failed`).
+* `drop` uses main, hotbar and offhand, never worn armor; `count` -1 (or absent) = all. The bot looks level first so the items land a couple of blocks ahead, outside its pickup range. Data `{dropped, missing}`.
+
+## mod: attack and guard
+* `attack` measures `radius` from where the task started. Without `types` it targets `Enemy` mobs; with `types` any living non-player entity of those types (so animals can be named). Players are never targets. Done after 1 s without a target; data `{killed, unreachable, center}` (`killed` = fought targets seen dying). A target the path finder cannot reach (3 failed paths, or 10 arrivals still out of reach) is skipped.
+* `guard` targets `Enemy` mobs inside `radius` of `center` only; unreachable ones are retried after 30 s. Outside the radius with nothing to fight it walks back to `GoalNear(center, min(4, radius/2))`; 5 failed returns = `path_failed`. It eats with the shared `Eater` only when auto-eat is off (food < 14, or health below half and food < 20).
+* Both yield while the defense behaviour is engaged (it fights hostiles in its own radius, or flees in `flee` mode) or while eating.
+
+## mod: selection ops
+`block` is required for fill/walls/shell/replace and `from` (globs) for replace. `missing_materials` data counts block positions in loaded chunks that still differ from the target (replace: still match `from`) minus the inventory count of the block's item (key = block id when it has no item); boxes over 4 M blocks skip the count and report `stuck`.
+
+## mod: protection guard
+With `protection.enabled`, the `MultiPlayerGameMode` mixin refuses `startDestroyBlock`/`continueDestroyBlock` inside a zone of the current dimension (a zone without `dim` applies everywhere) or on a `noBreak` block, and aborts a break already in progress; refusals are logged (`log` warn, once per position per 10 s). Baritone only knows `noBreak` (merged into `blocksToDisallowBreaking`); a Baritone process aiming at a block inside a zone keeps retrying until the task times out.
+
+## mod: companion bridge
+`hello {token, botId, modVersion}` goes out every 2 s for 30 s after joining when `companion.enabled` (also when the setting is switched on while in game). Every plugin message, `welcome`/`reject` included, is forwarded to the manager as `plugin {payload}` (reliable send). `companion` events: `verified` (data = welcome payload + state), `rejected` (warn, data.reason), `absent` (info, after 30 s without an answer). Manager `plugin` messages while not on a server, without a `payload` object, or over 32 767 bytes are dropped with a `log` warning. Clientbound payloads over 1 MiB are ignored.
