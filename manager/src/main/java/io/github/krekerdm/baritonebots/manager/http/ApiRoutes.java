@@ -38,6 +38,7 @@ import java.util.concurrent.TimeoutException;
  */
 final class ApiRoutes {
     private static final long QUERY_TIMEOUT_MS = 9_000;
+    private static final long MS_CODE_WAIT_MS = 45_000;
     private static final long DISK_CACHE_MS = 60_000;
 
     private final Manager m;
@@ -247,8 +248,25 @@ final class ApiRoutes {
             return botAction(q, b -> linked(b).session.send(MessageTypes.CHAT, Json.obj("text", text)));
         });
         r.post("/api/bots/{id}/microsoft-login", q -> {
-            throw ApiException.unsupported("Microsoft accounts are not supported yet (phase 2); use an offline account");
+            CompletableFuture<JsonObject> f = loop(() -> m.msLogin.start(m.bots.require(q.param("id"))));
+            try {
+                return f.get(MS_CODE_WAIT_MS, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                throw new ApiException(504, "timeout", "HeadlessMC printed no device code within "
+                        + MS_CODE_WAIT_MS / 1000 + " s; see the bot's events");
+            } catch (ExecutionException e) {
+                throw new ApiException(502, "login_failed", String.valueOf(e.getCause().getMessage()));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new ApiException(503, "busy", "interrupted");
+            }
         });
+        r.get("/api/bots/{id}/microsoft-login", q -> loop(() -> m.msLogin.view(m.bots.require(q.param("id")))));
+        r.delete("/api/bots/{id}/microsoft-login", q -> loop(() -> {
+            BotState b = m.bots.require(q.param("id"));
+            m.msLogin.cancel(b);
+            return m.msLogin.view(b);
+        }));
         r.get("/api/bots/{id}/log", q -> {
             int lines = q.queryInt("lines", 200, 1, 2000);
             BotState b = loop(() -> m.bots.require(q.param("id")));
@@ -550,6 +568,22 @@ final class ApiRoutes {
             return null;
         }));
 
+        // schedules and rules (config.json schedules[] / rules[]; §5.7b)
+        configList(r, "/api/schedules", "schedules", "schedule", () -> m.automation.schedules().view());
+        configList(r, "/api/rules", "rules", "rule", () -> m.automation.rules().view());
+        r.post("/api/schedules/{id}/run", q -> loop(() -> {
+            String id = q.param("id");
+            var def = m.config.get().schedules().stream().filter(s -> s.id().equalsIgnoreCase(id)).findFirst()
+                    .orElseThrow(() -> ApiException.notFound("schedule '" + id + "'"));
+            return Json.obj("bots", Json.arrOf(m.automation.schedules().fire(def, def.serverId(), "manual")));
+        }));
+        r.post("/api/rules/{id}/run", q -> loop(() -> {
+            String id = q.param("id");
+            var def = m.config.get().rules().stream().filter(x -> x.id().equalsIgnoreCase(id)).findFirst()
+                    .orElseThrow(() -> ApiException.notFound("rule '" + id + "'"));
+            return Json.obj("bots", Json.arrOf(m.automation.rules().runNow(def)));
+        }));
+
         // extras (not in SPEC §6): planner overview and game data lookups
         r.get("/api/planner", q -> loop(m.planner::view));
         r.get("/api/gamedata", q -> loop(m.gameData::view));
@@ -560,6 +594,42 @@ final class ApiRoutes {
             }
             return data.describe(q.param("id"));
         });
+    }
+
+    /**
+     * GET (live view) / POST (id from the name when absent) / PUT (merge patch; an {@code if} object replaces the old
+     * one) / DELETE over a config.json list.
+     */
+    private void configList(Router r, String path, String list, String fallback, Callable<Object> view) {
+        r.get(path, q -> loop(view));
+        r.post(path, q -> {
+            JsonObject body = q.json();
+            return loop(() -> {
+                if (Json.getString(body, "id", "").isBlank()) {
+                    body.addProperty("id", uniqueId(slug(Json.getString(body, "name", fallback)), list));
+                }
+                return new HttpApi.Status(201, m.config.addItem(list, body));
+            });
+        });
+        r.put(path + "/{id}", q -> {
+            JsonObject body = q.json();
+            return loop(() -> {
+                JsonObject cond = Json.getObj(body, "if");
+                if (cond != null) { // a new trigger replaces the old one instead of merging into it
+                    m.config.findItem(list, q.param("id")).map(old -> Json.getObj(old, "if")).ifPresent(old ->
+                            old.keySet().forEach(k -> {
+                                if (!cond.has(k)) {
+                                    cond.add(k, com.google.gson.JsonNull.INSTANCE);
+                                }
+                            }));
+                }
+                return m.config.updateItem(list, q.param("id"), body);
+            });
+        });
+        r.delete(path + "/{id}", q -> loop(() -> {
+            m.config.removeItem(list, q.param("id"));
+            return null;
+        }));
     }
 
     /** Keeps the id rules in one place for callers that build ids. */

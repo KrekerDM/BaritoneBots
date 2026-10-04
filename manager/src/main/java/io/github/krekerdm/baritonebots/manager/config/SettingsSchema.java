@@ -26,7 +26,9 @@ public final class SettingsSchema {
     public static final List<String> ROLES = List.of("builder", "miner", "lumberjack", "farmer", "smelter",
             "crafter", "sorter", "rancher", "hauler", "guard");
     public static final List<String> SECTIONS = List.of("general", "runtime", "servers", "bots", "behaviour",
-            "baritone", "client", "status", "planner", "autopilot", "orders");
+            "baritone", "client", "status", "planner", "autopilot", "orders", "schedules", "rules");
+    /** {@code priority} of schedules and rules: normal = queued behind planner work, high = replaces it (§5.7b). */
+    public static final List<String> STEP_PRIORITIES = List.of("normal", "high");
     /** Container roles a standing order may deliver into (besides {@code sorted:<category>} and container ids). */
     public static final List<String> ORDER_ROLES = List.of("storage", "supply", "kit", "fuel", "inbox");
     /** Xmx per bot for {@code runtime.memoryPreset}; {@code custom} uses {@code runtime.memoryMb}. */
@@ -150,6 +152,8 @@ public final class SettingsSchema {
         planner(l);
         autopilot(l);
         orders(l);
+        schedules(l);
+        rules(l);
         return List.copyOf(l);
     }
 
@@ -236,6 +240,8 @@ public final class SettingsSchema {
         l.add(f("servers[].protection.zones", JSON, new JsonArray()));
         l.add(f("servers[].baritone", MAP, new JsonObject()));
         l.add(choice("servers[].antiXray", ENUM, "none", List.of("none", "hide", "fake")));
+        l.add(f("servers[].dayStart", STRING, "07:00"));
+        l.add(f("servers[].nightStart", STRING, "22:00"));
     }
 
     private static void bots(List<SchemaField> l) {
@@ -328,6 +334,33 @@ public final class SettingsSchema {
         l.add(num("orders[].min", INT, 64, 0, 100000, "items"));
         l.add(num("orders[].max", INT, null, 0, 100000, "items").asNullable());
         l.add(f("orders[].into", STRING, "storage"));
+    }
+
+    /** Schedules (SPEC §5.7b): steps queued on a 5-field cron, or when day / night starts. */
+    private static void schedules(List<SchemaField> l) {
+        l.add(f("schedules", LIST, new JsonArray()));
+        l.add(f("schedules[].id", STRING, null));
+        l.add(f("schedules[].name", STRING, ""));
+        l.add(f("schedules[].enabled", BOOL, true));
+        l.add(f("schedules[].serverId", STRING, null).asNullable());
+        l.add(f("schedules[].when", STRING, "0 * * * *"));
+        l.add(f("schedules[].botIds", JSON, "any"));
+        l.add(f("schedules[].steps", JSON, new JsonArray()));
+        l.add(choice("schedules[].priority", ENUM, "normal", STEP_PRIORITIES));
+    }
+
+    /** Rules (SPEC §5.7b): if a trigger happens, queue steps (with a cooldown). */
+    private static void rules(List<SchemaField> l) {
+        l.add(f("rules", LIST, new JsonArray()));
+        l.add(f("rules[].id", STRING, null));
+        l.add(f("rules[].name", STRING, ""));
+        l.add(f("rules[].enabled", BOOL, true));
+        l.add(f("rules[].serverId", STRING, null).asNullable());
+        l.add(f("rules[].if", JSON, new JsonObject()));
+        l.add(f("rules[].then", JSON, new JsonArray()));
+        l.add(f("rules[].botIds", JSON, "any"));
+        l.add(num("rules[].cooldownSec", INT, 300, 0, 86400, "s"));
+        l.add(choice("rules[].priority", ENUM, "normal", STEP_PRIORITIES));
     }
 
     /** Sorting categories (SPEC §5.7a); the first category whose globs or {@code #tags} match an item wins. */

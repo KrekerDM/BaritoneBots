@@ -16,7 +16,6 @@ import io.github.krekerdm.baritonebots.manager.bots.BotState;
 import io.github.krekerdm.baritonebots.manager.config.ManagerConfig;
 import io.github.krekerdm.baritonebots.manager.gamedata.GameData;
 import io.github.krekerdm.baritonebots.manager.planner.Assignment;
-import io.github.krekerdm.baritonebots.manager.planner.ItemStacks;
 import io.github.krekerdm.baritonebots.manager.planner.Planner;
 import io.github.krekerdm.baritonebots.manager.planner.Restock;
 import io.github.krekerdm.baritonebots.manager.planner.WorkItem;
@@ -159,7 +158,7 @@ final class AutopilotSource implements WorkSource {
     }
 
     /** Unassigned storage chests take the category most of their slots belong to. */
-    private void adopt(WorldDoc doc) {
+    void adopt(WorldDoc doc) {
         Categories cats = ap.categories();
         boolean changed = false;
         for (WorldDoc.Container c : List.copyOf(doc.containers)) {
@@ -184,7 +183,7 @@ final class AutopilotSource implements WorkSource {
     }
 
     /** Category chests and empty unassigned storage chests of a dimension. */
-    private List<WorldDoc.Container> sortTargets(WorldDoc doc, String dim) {
+    static List<WorldDoc.Container> sortTargets(WorldDoc doc, String dim) {
         List<WorldDoc.Container> out = new ArrayList<>();
         for (WorldDoc.Container c : doc.containers) {
             if (!Dims.normalize(c.dim()).equals(Dims.normalize(dim)) || c.hasRole("inbox") || c.snapshot() == null) {
@@ -276,38 +275,19 @@ final class AutopilotSource implements WorkSource {
                 av.forEach((k, v) -> stock.merge(k, v, Integer::sum));
             }
         }
-        String input = null;
-        int best = 0;
-        for (Map.Entry<String, Integer> e : stock.entrySet()) {
-            if (!Ids.matchesAny(g.smeltInputs(), e.getKey()) || e.getValue() <= best) {
-                continue;
-            }
-            boolean ok = data.isEmpty() ? GameData.SMELTING.equals(type)
-                    : data.cookingRecipesUsing(e.getKey()).stream().anyMatch(r -> r.type().equals(type));
-            if (ok) {
-                input = e.getKey();
-                best = e.getValue();
-            }
-        }
-        if (input == null) {
+        // same choice as smelt projects and smelt_all (shared code)
+        io.github.krekerdm.baritonebots.manager.projects.Smelter.Load load =
+                io.github.krekerdm.baritonebots.manager.projects.Smelter.plan(type, stock, g.smeltInputs(), List.of(), data, 64);
+        if (load == null) {
             return null;
         }
-        int count = Math.min(64, best);
-        String fuel = null;
-        for (String candidate : ItemStacks.knownFuels()) {
-            int need = (int) Math.ceil(count / ItemStacks.burnItems(candidate));
-            if (stock.getOrDefault(candidate, 0) >= need) {
-                fuel = candidate;
-                break;
-            }
-        }
-        if (fuel == null) {
-            notes.put(REFUEL + ":" + Planner.containerKey(f), "no fuel in storage for " + count + " × " + Ids.path(input));
+        if (load.fuel() == null) {
+            notes.put(REFUEL + ":" + Planner.containerKey(f), "no fuel in storage for " + load.count() + " × "
+                    + Ids.path(load.input()));
             return null;
         }
-        int fuelCount = (int) Math.ceil(count / ItemStacks.burnItems(fuel));
-        return Json.obj("furnace", f.pos(), "type", type, "input", input, "count", count, "fuel", fuel,
-                "fuelCount", fuelCount);
+        return Json.obj("furnace", f.pos(), "type", type, "input", load.input(), "count", load.count(),
+                "fuel", load.fuel(), "fuelCount", load.fuelCount());
     }
 
     static String recipeType(String block) {
@@ -444,7 +424,7 @@ final class AutopilotSource implements WorkSource {
     }
 
     /** {@code transfer} entries emptying one inbox, sized to the bot's free slots. */
-    private List<QueueEntry> moves(Assignment a, BotState b, WorldDoc.Container inbox) {
+    List<QueueEntry> moves(Assignment a, BotState b, WorldDoc.Container inbox) {
         int slots = Math.max(1, (b.status == null ? 27 : b.status.freeSlots()) - 1);
         SortPlanner.Plan plan = SortPlanner.plan(inbox, sortTargets(doc(), inbox.dim()), ap.categories(), slots);
         List<QueueEntry> out = new ArrayList<>();

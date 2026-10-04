@@ -142,7 +142,10 @@
       {"name": "name", "type": "string", "required": true}
     ]},
     {"step": "sort_storage", "continuous": false, "heavy": false, "supported": true, "args": []},
-    {"step": "smelt_all", "continuous": false, "heavy": false, "supported": false, "args": []},
+    {"step": "smelt_all", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "inputs", "type": "items", "required": false},
+      {"name": "fuel", "type": "items", "required": false}
+    ]},
     {"step": "obtain", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "item", "type": "item", "required": true},
       {"name": "count", "type": "int", "required": false, "default": 1, "min": 1, "max": 2304, "unit": "items"}]},
@@ -158,6 +161,56 @@
       {"name": "rotation", "type": "enum", "enum": [0, 90, 180, 270], "required": true, "default": 0},
       {"name": "mirror", "type": "enum", "enum": ["none", "front_back", "left_right"], "required": true, "default": "none"},
       {"name": "supply", "type": "containers", "required": false}
+    ]},
+    {"kind": "gather", "supported": true, "args": [
+      {"name": "quotas", "type": "item_counts", "required": true},
+      {"name": "into", "type": "string", "required": false, "default": "storage"},
+      {"name": "storage", "type": "containers", "required": false},
+      {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
+      {"name": "repeat", "type": "bool", "required": false, "default": false}
+    ]},
+    {"kind": "clear", "supported": true, "args": [
+      {"name": "box", "type": "box", "required": false},
+      {"name": "area", "type": "string", "required": false},
+      {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
+      {"name": "deposit", "type": "containers", "required": false},
+      {"name": "verify", "type": "bool", "required": false, "default": true}
+    ]},
+    {"kind": "farm", "supported": true, "args": [
+      {"name": "box", "type": "box", "required": false},
+      {"name": "area", "type": "string", "required": false},
+      {"name": "center", "type": "pos", "required": false},
+      {"name": "range", "type": "int", "required": false, "min": 1, "max": 128, "unit": "blocks"},
+      {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
+      {"name": "durationSec", "type": "int", "required": false, "default": 600, "min": 30, "max": 86400, "unit": "s"},
+      {"name": "farmers", "type": "int", "required": false, "default": 1, "min": 1, "max": 16},
+      {"name": "cycles", "type": "int", "required": false, "default": 0, "min": 0, "max": 100000},
+      {"name": "deposit", "type": "containers", "required": false}
+    ]},
+    {"kind": "ranch", "supported": true, "args": [
+      {"name": "box", "type": "box", "required": false},
+      {"name": "area", "type": "string", "required": false},
+      {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
+      {"name": "animal", "type": "string", "required": true, "default": "minecraft:cow"},
+      {"name": "food", "type": "item", "required": false},
+      {"name": "max", "type": "int", "required": false, "default": 20, "min": 2, "max": 500, "unit": "animals"},
+      {"name": "keep", "type": "int", "required": false, "default": 4, "min": 0, "max": 500, "unit": "animals"},
+      {"name": "shear", "type": "bool", "required": false, "default": false},
+      {"name": "intervalSec", "type": "int", "required": false, "default": 300, "min": 30, "max": 86400, "unit": "s"},
+      {"name": "deposit", "type": "containers", "required": false}
+    ]},
+    {"kind": "sort", "supported": true, "args": [
+      {"name": "inbox", "type": "containers", "required": false},
+      {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
+      {"name": "continuous", "type": "bool", "required": false, "default": false}
+    ]},
+    {"kind": "smelt", "supported": true, "args": [
+      {"name": "inputs", "type": "items", "required": true, "default": ["minecraft:raw_iron", "minecraft:raw_gold", "minecraft:raw_copper"]},
+      {"name": "fuel", "type": "items", "required": false},
+      {"name": "furnaces", "type": "containers", "required": false},
+      {"name": "output", "type": "containers", "required": false},
+      {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
+      {"name": "continuous", "type": "bool", "required": false, "default": false}
     ]}
   ]
 }

@@ -81,6 +81,8 @@ public final class Manager implements LinkServer.Handler {
     public final ProjectService projects;
     public final io.github.krekerdm.baritonebots.manager.autopilot.Autopilot autopilot;
     public final io.github.krekerdm.baritonebots.manager.goals.GoalRunner goals;
+    public final io.github.krekerdm.baritonebots.manager.automation.Automation automation;
+    public final io.github.krekerdm.baritonebots.manager.process.MicrosoftLogin msLogin;
     public final LinkServer link;
     public final HttpApi http;
     private Tray tray;
@@ -116,6 +118,8 @@ public final class Manager implements LinkServer.Handler {
         projects = new ProjectService(this, planner, dataDir.resolve("projects"));
         autopilot = new io.github.krekerdm.baritonebots.manager.autopilot.Autopilot(this, planner);
         goals = new io.github.krekerdm.baritonebots.manager.goals.GoalRunner(this);
+        automation = new io.github.krekerdm.baritonebots.manager.automation.Automation(this);
+        msLogin = new io.github.krekerdm.baritonebots.manager.process.MicrosoftLogin(this);
         link = new LinkServer(loop, this);
         http = new HttpApi(this);
     }
@@ -130,6 +134,7 @@ public final class Manager implements LinkServer.Handler {
         loop.awaitRun(() -> {
             events.open();
             events.addListener(e -> sse.broadcast(SseHub.EVENT, e));
+            events.addListener(automation::onEvent);
             kits.load();
             scenarios.load();
             for (ManagerConfig.BotDef def : config.get().bots()) {
@@ -155,6 +160,7 @@ public final class Manager implements LinkServer.Handler {
             gameData.ensureLoaded();
             planner.start();
             projects.resumeRunning();
+            automation.start();
         });
     }
 
@@ -217,6 +223,8 @@ public final class Manager implements LinkServer.Handler {
         try {
             loop.awaitRun(() -> {
                 planner.stop();
+                automation.stop();
+                msLogin.shutdown();
                 dispatcher.saveQueues();
                 projects.flush();
                 worlds.flush();
@@ -446,6 +454,7 @@ public final class Manager implements LinkServer.Handler {
         boolean online = b.online();
         sse.broadcast(SseHub.BOT, Json.obj("botId", b.id, "status", st));
         autopilot.onStatus(b);
+        automation.onStatus(b);
         if (online != wasOnline) {
             broadcastProcess(b);
             if (online) {
@@ -475,6 +484,7 @@ public final class Manager implements LinkServer.Handler {
         }
         worlds.onSnapshot(b.def.serverId(), snap);
         broadcastWorld(b.def.serverId());
+        automation.onSnapshot(b.def.serverId());
     }
 
     /** Max distinct plugin message types remembered per bot. */

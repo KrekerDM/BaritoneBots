@@ -68,11 +68,13 @@ public final class ProcessSupervisor {
     /**
      * Starts a bot (installing the runtime first when needed; starts are staggered by {@code startStaggerSec}).
      *
-     * @throws ApiException {@code unsupported} for Microsoft accounts, {@code disabled} for disabled bots
+     * @throws ApiException {@code login_required} for Microsoft accounts without a stored login, {@code disabled} for
+     *                      disabled bots
      */
     public void start(BotState b) {
-        if (b.def.microsoft()) {
-            throw ApiException.badRequest("unsupported", "Microsoft accounts are not supported yet; use an offline account");
+        if (b.def.microsoft() && !m.msLogin.hasAccount(b.id)) {
+            throw ApiException.conflict("login_required",
+                    "log in with the Microsoft account first (POST /api/bots/" + b.id + "/microsoft-login)");
         }
         if (!b.def.enabled()) {
             throw ApiException.conflict("disabled", "the bot is disabled");
@@ -119,7 +121,7 @@ public final class ProcessSupervisor {
 
     public void startAll() {
         for (BotState b : m.bots.all()) {
-            if (b.def.enabled() && !b.def.microsoft()) {
+            if (b.def.enabled() && (!b.def.microsoft() || m.msLogin.hasAccount(b.id))) {
                 try {
                     start(b);
                 } catch (ApiException e) {
@@ -132,7 +134,7 @@ public final class ProcessSupervisor {
     /** {@code general.autoStartBots}: bots with {@code autoStart}. */
     public void autoStart() {
         for (BotState b : m.bots.all()) {
-            if (b.def.enabled() && b.def.autoStart() && !b.def.microsoft()) {
+            if (b.def.enabled() && b.def.autoStart() && (!b.def.microsoft() || m.msLogin.hasAccount(b.id))) {
                 start(b);
             }
         }
@@ -442,8 +444,13 @@ public final class ProcessSupervisor {
         Map<String, String> props = new LinkedHashMap<>();
         props.put("hmc.mcdir", HmcFiles.slashes(m.installer.mcDir()));
         props.put("hmc.gamedir", HmcFiles.slashes(gameDir));
-        props.put("hmc.offline", "true");
-        props.put("hmc.offline.username", def.username());
+        if (def.microsoft()) {
+            // the account HeadlessMC stored at login (bots/<id>/HeadlessMC/auth/.accounts.json); refreshed on launch
+            props.put("hmc.offline", "false");
+        } else {
+            props.put("hmc.offline", "true");
+            props.put("hmc.offline.username", def.username());
+        }
         props.put("hmc.always.lwjgl.flag", "true");
         props.put("hmc.assets.dummy", "true");
         props.put("hmc.jvmargs", String.join(" ", jvm));
@@ -460,7 +467,10 @@ public final class ProcessSupervisor {
         // No -noout: HeadlessMC 2.10.0 then stops reading the game's stdout, the pipe fills up and the game
         // blocks inside log4j during startup. The game output is forwarded and drained into launcher.log instead.
         command.addAll(List.of("-jar", m.installer.hmcJar(cfg).toAbsolutePath().toString(), "--command", "launch",
-                "fabric:" + cfg.runtime().minecraftVersion(), "-lwjgl", "-offline"));
+                "fabric:" + cfg.runtime().minecraftVersion(), "-lwjgl"));
+        if (!def.microsoft()) {
+            command.add("-offline");
+        }
         List<Path> mods = new ArrayList<>();
         for (String f : m.installer.modFiles()) {
             mods.add(m.installer.modsDir().resolve(f));

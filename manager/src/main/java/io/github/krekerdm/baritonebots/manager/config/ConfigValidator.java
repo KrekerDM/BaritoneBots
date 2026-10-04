@@ -277,6 +277,89 @@ public final class ConfigValidator {
                 errors.putIfAbsent(p + ".into", "pattern");
             }
         }
+        automation(root, serverIds, botIds, errors);
+    }
+
+    private static io.github.krekerdm.baritonebots.manager.tasks.TaskCatalog catalog;
+
+    /** The task catalog for step validation (loaded once from the classpath). */
+    private static synchronized io.github.krekerdm.baritonebots.manager.tasks.TaskCatalog catalog() {
+        if (catalog == null) {
+            catalog = io.github.krekerdm.baritonebots.manager.tasks.TaskCatalog.load();
+        }
+        return catalog;
+    }
+
+    /** Schedules and rules (SPEC §5.7b) plus the servers' day / night times. */
+    private static void automation(JsonObject root, Set<String> serverIds, Set<String> botIds, Map<String, String> errors) {
+        JsonArray servers = Json.getArr(root, "servers");
+        for (int i = 0; servers != null && i < servers.size(); i++) {
+            if (servers.get(i).isJsonObject()) {
+                for (String key : List.of("dayStart", "nightStart")) {
+                    String v = Json.getString(servers.get(i).getAsJsonObject(), key, "07:00");
+                    if (io.github.krekerdm.baritonebots.manager.automation.DayNight.parse(v) == null) {
+                        errors.putIfAbsent("servers[" + i + "]." + key, "pattern");
+                    }
+                }
+            }
+        }
+        Set<String> ids = new HashSet<>();
+        JsonArray schedules = Json.getArr(root, "schedules");
+        for (int i = 0; schedules != null && i < schedules.size(); i++) {
+            if (!schedules.get(i).isJsonObject()) {
+                continue;
+            }
+            JsonObject s = schedules.get(i).getAsJsonObject();
+            String p = "schedules[" + i + "]";
+            uniqueId(Json.getString(s, "id", ""), p + ".id", ids, errors);
+            serverRef(s, p, serverIds, errors);
+            String when = Json.getString(s, "when", "").trim();
+            if (!"day".equalsIgnoreCase(when) && !"night".equalsIgnoreCase(when)
+                    && !io.github.krekerdm.baritonebots.manager.automation.Cron.valid(when)) {
+                errors.putIfAbsent(p + ".when", "cron");
+            }
+            targetAndSteps(s, "steps", p, botIds, errors);
+        }
+        ids.clear();
+        JsonArray rules = Json.getArr(root, "rules");
+        for (int i = 0; rules != null && i < rules.size(); i++) {
+            if (!rules.get(i).isJsonObject()) {
+                continue;
+            }
+            JsonObject r = rules.get(i).getAsJsonObject();
+            String p = "rules[" + i + "]";
+            uniqueId(Json.getString(r, "id", ""), p + ".id", ids, errors);
+            serverRef(r, p, serverIds, errors);
+            JsonElement cond = r.get("if");
+            try {
+                io.github.krekerdm.baritonebots.manager.automation.Trigger.parse(
+                        cond != null && cond.isJsonObject() ? cond.getAsJsonObject() : null);
+            } catch (IllegalArgumentException e) {
+                String[] pc = String.valueOf(e.getMessage()).split(":", 2);
+                errors.putIfAbsent(p + ".if" + (pc[0].isEmpty() ? "" : "." + pc[0]), pc.length > 1 ? pc[1] : "type");
+            }
+            targetAndSteps(r, "then", p, botIds, errors);
+        }
+    }
+
+    private static void serverRef(JsonObject o, String p, Set<String> serverIds, Map<String, String> errors) {
+        String server = Json.getString(o, "serverId", null);
+        if (server != null && !server.isBlank() && !serverIds.contains(server.toLowerCase(Locale.ROOT))) {
+            errors.putIfAbsent(p + ".serverId", "unknown_server");
+        }
+    }
+
+    private static void targetAndSteps(JsonObject o, String stepsKey, String p, Set<String> botIds,
+                                       Map<String, String> errors) {
+        String bad = io.github.krekerdm.baritonebots.manager.automation.StepRunner.checkTarget(o.get("botIds"), botIds);
+        if (bad != null) {
+            errors.putIfAbsent(p + ".botIds", bad);
+        }
+        String steps = io.github.krekerdm.baritonebots.manager.automation.StepRunner.checkSteps(catalog(), o.get(stepsKey));
+        if (steps != null) {
+            String[] pc = steps.split(":", 2);
+            errors.putIfAbsent(p + "." + stepsKey + pc[0], pc[1]);
+        }
     }
 
     /** Category names: lowercase ids usable in {@code sorted:<name>}. */

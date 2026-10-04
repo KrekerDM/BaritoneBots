@@ -48,8 +48,7 @@ class CatalogI18nTest {
             assertTrue(catalog.isSupported(supported), supported + " should be supported");
         }
         assertTrue(catalog.isStep("kit") && catalog.isSupported("kit"));
-        assertFalse(catalog.isSupported("smelt_all"));
-        for (String step : List.of("sort_storage", "obtain", "progress", "supply")) {
+        for (String step : List.of("sort_storage", "smelt_all", "obtain", "progress", "supply")) {
             assertTrue(catalog.isStep(step) && catalog.isSupported(step), step + " should be a supported manager step");
         }
         assertTrue(catalog.isHeavy("mine"));
@@ -77,6 +76,34 @@ class CatalogI18nTest {
         for (JsonElement r : json.getAsJsonArray("roles")) {
             requireKey(missing, "role." + r.getAsString());
         }
+        assertEquals(List.of(), missing);
+    }
+
+    @Test
+    void everyProjectKindIsSupportedAndLabelled() {
+        List<String> missing = new ArrayList<>();
+        List<String> kinds = new ArrayList<>();
+        for (JsonElement k : catalog.json().getAsJsonArray("projectKinds")) {
+            JsonObject o = k.getAsJsonObject();
+            String kind = Json.getString(o, "kind", "");
+            kinds.add(kind);
+            assertTrue(Json.getBool(o, "supported", false), kind + " should be supported");
+            for (String lang : I18n.LANGS) {
+                JsonObject all = i18n.merged(lang);
+                for (String key : List.of("kind." + kind, "kind." + kind + ".desc")) {
+                    if (!all.has(key)) {
+                        missing.add(lang + ":" + key);
+                    }
+                }
+                for (JsonElement a : o.getAsJsonArray("args")) {
+                    String arg = Json.getString(a.getAsJsonObject(), "name", "");
+                    if (!all.has("project." + kind + ".arg." + arg) && !all.has("pfield." + arg)) {
+                        missing.add(lang + ":pfield." + arg);
+                    }
+                }
+            }
+        }
+        assertEquals(List.of("build", "gather", "clear", "farm", "ranch", "sort", "smelt"), kinds);
         assertEquals(List.of(), missing);
     }
 

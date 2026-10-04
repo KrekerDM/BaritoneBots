@@ -50,6 +50,12 @@ public final class ProjectService {
         this.planner = planner;
         this.dir = dir;
         register(new BuildKind(m));
+        register(new GatherKind(m));
+        register(new ClearKind(m));
+        register(new FarmKind(m));
+        register(new RanchKind(m));
+        register(new SortKind(m));
+        register(new SmeltKind(m));
     }
 
     public void register(ProjectKind kind) {

@@ -1,5 +1,6 @@
 package io.github.krekerdm.baritonebots.manager.config;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import io.github.krekerdm.baritonebots.common.json.Json;
 
@@ -13,13 +14,16 @@ import java.util.Optional;
  */
 public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProfile> servers, List<BotDef> bots,
                             JsonObject behaviour, JsonObject baritone, JsonObject client, JsonObject status,
-                            PlannerCfg planner, AutopilotCfg autopilot, List<OrderDef> orders) {
+                            PlannerCfg planner, AutopilotCfg autopilot, List<OrderDef> orders,
+                            List<ScheduleDef> schedules, List<RuleDef> rules) {
 
     public ManagerConfig {
         servers = servers == null ? List.of() : List.copyOf(servers);
         bots = bots == null ? List.of() : List.copyOf(bots);
         autopilot = autopilot == null ? AutopilotCfg.defaults() : autopilot;
         orders = orders == null ? List.of() : List.copyOf(orders);
+        schedules = schedules == null ? List.of() : List.copyOf(schedules);
+        rules = rules == null ? List.of() : List.copyOf(rules);
         behaviour = orEmpty(behaviour);
         baritone = orEmpty(baritone);
         client = orEmpty(client);
@@ -100,7 +104,7 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
     /** Server profile; the companion token lives in secrets.json, not here. */
     public record ServerProfile(String id, String name, String address, boolean autoConnect, JsonObject reconnect,
                                 JsonObject login, CompanionCfg companion, JsonObject protection, JsonObject baritone,
-                                String antiXray) {
+                                String antiXray, String dayStart, String nightStart) {
         /** {@code antiXray} values (SPEC §5.7b3): Paper anti-xray off, engine-mode 1 (hide), engine-mode 2 (fake ores). */
         public static final String ANTI_XRAY_NONE = "none";
         public static final String ANTI_XRAY_HIDE = "hide";
@@ -113,6 +117,8 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
             protection = orEmpty(protection);
             baritone = orEmpty(baritone);
             antiXray = antiXray == null || antiXray.isBlank() ? ANTI_XRAY_NONE : antiXray;
+            dayStart = dayStart == null || dayStart.isBlank() ? "07:00" : dayStart;
+            nightStart = nightStart == null || nightStart.isBlank() ? "22:00" : nightStart;
         }
     }
 
@@ -210,6 +216,33 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
         /** Stock the order fills up to once it dropped below {@code min}. */
         public int target() {
             return max != null && max > min ? max : min;
+        }
+    }
+
+    /**
+     * A schedule (SPEC §5.7b): {@code when} = 5-field cron, {@code day} or {@code night}; {@code botIds} = list of bot
+     * ids, {@code "any"} (one free bot) or {@code "all"}; {@code steps} = TaskTemplates / manager steps.
+     */
+    public record ScheduleDef(String id, String name, boolean enabled, String serverId, String when, JsonElement botIds,
+                              JsonElement steps, String priority) {
+        public boolean high() {
+            return "high".equals(priority);
+        }
+    }
+
+    /**
+     * A rule (SPEC §5.7b): {@code if} = one trigger object, {@code then} = steps, {@code cooldownSec} between firings
+     * (per rule and target bot).
+     */
+    public record RuleDef(String id, String name, boolean enabled, String serverId,
+                          @com.google.gson.annotations.SerializedName("if") JsonObject condition, JsonElement then,
+                          JsonElement botIds, int cooldownSec, String priority) {
+        public RuleDef {
+            condition = orEmpty(condition);
+        }
+
+        public boolean high() {
+            return "high".equals(priority);
         }
     }
 

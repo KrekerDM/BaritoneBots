@@ -182,6 +182,8 @@ public final class ConfigStore {
         normalizeList(out, "servers");
         normalizeList(out, "bots");
         normalizeList(out, "orders");
+        normalizeList(out, "schedules");
+        normalizeList(out, "rules");
         JsonObject runtime = Json.getObj(out, "runtime");
         if (runtime != null) {
             JsonArray mods = Json.getArr(runtime, "mods");

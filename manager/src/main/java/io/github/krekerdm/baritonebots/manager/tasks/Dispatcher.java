@@ -54,6 +54,7 @@ public final class Dispatcher {
     public static final String STEP_OBTAIN = "obtain";
     public static final String STEP_PROGRESS = "progress";
     public static final String STEP_SORT_STORAGE = "sort_storage";
+    public static final String STEP_SMELT_ALL = "smelt_all";
     /** Origin of the {@code take}s auto-supply inserts: their failures never stop a scenario or a planner batch. */
     public static final String ORIGIN_SUPPLY = "supply";
     /** A stuck task is retried once after stepping back this far. */
@@ -409,6 +410,7 @@ public final class Dispatcher {
             case STEP_OBTAIN -> m.goals.obtain(b, e);
             case STEP_PROGRESS -> m.goals.progress(b, e);
             case STEP_SORT_STORAGE -> m.autopilot.sortNow(b, e);
+            case STEP_SMELT_ALL -> io.github.krekerdm.baritonebots.manager.projects.Smelter.smeltAll(m, b, e);
             default -> stepFailed(b, e, Reasons.UNSUPPORTED, "manager step '" + e.type() + "' is not implemented yet");
         }
     }

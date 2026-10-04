@@ -398,6 +398,37 @@ public final class Autopilot {
     }
 
     /** The {@code sort_storage} manager step: one sorting round over the bot's inboxes, as {@code transfer}s. */
+    private AutopilotSource source(String serverId) {
+        return serverId == null ? null : sources.get(serverId.toLowerCase(Locale.ROOT));
+    }
+
+    /** Sorting targets of a dimension: category chests and storage chests (not inbox / kit / supply / fuel). */
+    public List<WorldDoc.Container> sortTargets(String serverId, String dim) {
+        WorldDoc doc = m.worlds.get(serverId);
+        return doc == null ? List.of() : AutopilotSource.sortTargets(doc, dim);
+    }
+
+    /** One sorting round's plan for an inbox (also used by {@code sort} projects). */
+    public SortPlanner.Plan sortPlan(String serverId, WorldDoc.Container inbox, int slots) {
+        return SortPlanner.plan(inbox, sortTargets(serverId, inbox.dim()), categories(), slots);
+    }
+
+    /** {@code transfer} entries (origin = the assignment's source) emptying one inbox, sized to the bot's free slots. */
+    public List<QueueEntry> sortMoves(String serverId, io.github.krekerdm.baritonebots.manager.planner.Assignment a,
+                                      BotState b, WorldDoc.Container inbox) {
+        AutopilotSource src = source(serverId);
+        return src == null ? List.of() : src.moves(a, b, inbox);
+    }
+
+    /** Category adoption of unassigned storage chests (what auto-sort does every tick). */
+    public void adoptCategories(String serverId) {
+        AutopilotSource src = source(serverId);
+        WorldDoc doc = m.worlds.get(serverId);
+        if (src != null && doc != null) {
+            src.adopt(doc);
+        }
+    }
+
     public void sortNow(BotState b, QueueEntry e) {
         m.dispatcher.startStep(b, e);
         m.loop.post(() -> {

@@ -127,6 +127,14 @@ public final class Planner implements io.github.krekerdm.baritonebots.manager.ta
     /** Queue origin prefix of standing-order work. */
     public static final String ORIGIN_ORDER_PREFIX = "order:";
 
+    /**
+     * Schedule and rule entries ({@code schedule:<id>}, {@code rule:<id>}): user intent, but they do not cancel planner
+     * work when queued (they run when the current batch ends); priority {@code high} releases the assignment itself.
+     */
+    public static boolean isSoftOrigin(String origin) {
+        return origin != null && (origin.startsWith("schedule:") || origin.startsWith("rule:"));
+    }
+
     /** Planner work: projects, the autopilot and standing orders. Manual (panel, scenario) entries replace it. */
     public static boolean isPlannerOrigin(String origin) {
         return origin != null && (origin.startsWith(TaskSpec.ORIGIN_PROJECT_PREFIX)
@@ -436,7 +444,7 @@ public final class Planner implements io.github.krekerdm.baritonebots.manager.ta
 
     @Override
     public void onQueued(BotState b, List<QueueEntry> added) {
-        boolean manual = added.stream().anyMatch(e -> !isPlannerOrigin(e.origin())
+        boolean manual = added.stream().anyMatch(e -> !isPlannerOrigin(e.origin()) && !isSoftOrigin(e.origin())
                 && !QueueEntry.ORIGIN_RECOVERY.equals(e.origin()));
         if (manual && assignments.containsKey(b.id)) {
             m.loop.post(() -> {
