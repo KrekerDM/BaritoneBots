@@ -602,6 +602,7 @@
   "event.goal.skipped": "{bot}: пропущено {item}: {reason}",
   "event.autopilot.manual": "{bot}: для {task} нужно {items}, этого нет ни в одном контейнере; добавьте вручную",
   "event.autopilot.discovered": "{bot}: найдено новых контейнеров: {count} (радиус {radius})",
+  "event.autopilot.home_auto": "{bot}: на сервере не было точки home, она поставлена в {x} {y} {z} ({dim}); контейнеры рядом считаются хранилищем",
   "event.autopilot.adopted": "Сундук {x} {y} {z} теперь для категории {category}",
   "event.autopilot.sortFull": "Приёмник {x} {y} {z}: некуда положить {items}; добавьте или освободите сундуки категорий",
   "event.order.blocked": "Заказ {item} стоит: {items} нужно добавить вручную",

@@ -142,9 +142,21 @@ public final class Supply {
         }
         List<SupplyPlanner.Source> sources = ap.supplySources(b);
         SupplyPlanner.Plan plan = SupplyPlanner.plan(missing, sources, ctx, Math.max(1, inv.freeSlots() - 1));
-        if (!plan.inspect().isEmpty() && !Json.getBool(step.args(), "inspected", false)) {
-            // unknown contents first, then plan again with fresh snapshots
-            List<WorldDoc.Container> look = plan.inspect().subList(0, Math.min(8, plan.inspect().size()));
+        List<WorldDoc.Container> inspect = new ArrayList<>(plan.inspect());
+        if (!plan.missing().isEmpty()) {
+            // stale snapshots may be wrong too: look again before calling anything missing
+            long maxAge = ap.cfg(b).inspectMaxAgeMin() * 60_000L;
+            long now = System.currentTimeMillis();
+            for (SupplyPlanner.Source s : sources) {
+                WorldDoc.Snapshot snap = s.container().snapshot();
+                if (snap != null && maxAge > 0 && now - snap.time() > maxAge && !inspect.contains(s.container())) {
+                    inspect.add(s.container());
+                }
+            }
+        }
+        if (!inspect.isEmpty() && !Json.getBool(step.args(), "inspected", false)) {
+            // unknown / stale contents first, then plan again with fresh snapshots
+            List<WorldDoc.Container> look = inspect.subList(0, Math.min(8, inspect.size()));
             JsonObject again = step.args().deepCopy();
             again.addProperty("inspected", true);
             List<QueueEntry> children = List.of(

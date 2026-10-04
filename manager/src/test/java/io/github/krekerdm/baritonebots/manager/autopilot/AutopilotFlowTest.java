@@ -56,6 +56,7 @@ class AutopilotFlowTest {
         final List<String> cancels = new CopyOnWriteArrayList<>();
         final Map<String, Map<String, Integer>> chests = new ConcurrentHashMap<>();
         final Map<String, Integer> inv = new ConcurrentHashMap<>();
+        final JsonArray nearby = new JsonArray();
         volatile boolean holdMine;
         volatile JsonObject running;
 
@@ -125,7 +126,7 @@ class AutopilotFlowTest {
                     }
                     yield QueryResult.success(Json.obj("slots", slots, "armor", Json.arr(), "selected", 0));
                 }
-                case "containers_nearby" -> QueryResult.success(Json.obj("containers", new JsonArray()));
+                case "containers_nearby" -> QueryResult.success(Json.obj("containers", nearby.deepCopy()));
                 case "block_at" -> {
                     Pos p = Pos.fromJson(args.get("pos"));
                     yield QueryResult.success(Json.obj("block", p != null && p.y() >= 64 ? "minecraft:air" : "minecraft:stone",
@@ -141,6 +142,11 @@ class AutopilotFlowTest {
             JsonObject args = Json.getObj(t, "args");
             JsonObject data = new JsonObject();
             switch (type) {
+                case "inspect" -> {
+                    for (JsonElement p : args.getAsJsonArray("containers")) {
+                        snapshot(key(p));
+                    }
+                }
                 case "take" -> {
                     String key = key(args.get("container"));
                     JsonObject taken = new JsonObject();
@@ -368,6 +374,86 @@ class AutopilotFlowTest {
         assertEquals(4, Json.getInt(bot.tasks.get(1).getAsJsonObject("args"), "count", 0));
         until(this::idle, "queue done");
         assertTrue(bot.inv.getOrDefault("minecraft:oak_planks", 0) >= 4);
+    }
+
+    private WorldDoc.Container containerAt(int x) {
+        return m.loop.await(() -> m.worlds.get("main").containerAt("minecraft:overworld", new Pos(x, 64, 0)));
+    }
+
+    private static JsonObject seen(int x, String block) {
+        return Json.obj("pos", Json.obj("x", x, "y", 64, "z", 0), "dim", "minecraft:overworld", "block", block);
+    }
+
+    /** An index entry without a snapshot (contents unknown). */
+    private void unknown(int x, String block, String role) {
+        m.loop.awaitRun(() -> {
+            WorldDoc doc = m.worlds.get("main");
+            List<JsonObject> list = new ArrayList<>();
+            doc.containers.forEach(c -> list.add(Json.toObject(c)));
+            list.add(Json.obj("dim", "minecraft:overworld", "pos", Json.obj("x", x, "y", 64, "z", 0), "block", block,
+                    "roles", Json.arrOf(List.of(role))));
+            doc.applySections(Json.obj("containers", Json.arrOf(list)));
+        });
+    }
+
+    @Test
+    void discoveryWithoutHomeSetsOneAndRequestedContainersAreStorage() throws Exception {
+        bot = new Bot();
+        bot.nearby.add(seen(4, "minecraft:chest"));
+        autopilot(Json.obj("discovery", true));
+        until(() -> m.loop.await(() -> m.bots.require("bot1").online()), "online");
+        tickUntil(() -> containerAt(4) != null, "chest discovered");
+        assertTrue(event("home_auto"), "home set automatically");
+        WorldDoc.Waypoint home = m.loop.await(() -> m.worlds.get("main").waypoint("home"));
+        assertTrue(home != null && home.pos().distance(new Pos(0, 64, 0)) < 2, "home at the bot");
+        assertEquals(List.of("storage"), containerAt(4).roles(), "within homeRadius: storage, not found");
+
+        // POST discover: what the user asked for is storage, a known 'found' chest too; own roles stay
+        chest(300, List.of("found"), Map.of());
+        chest(310, List.of("kit"), Map.of());
+        JsonArray asked = new JsonArray();
+        asked.add(seen(200, "minecraft:barrel"));
+        asked.add(seen(300, "minecraft:chest"));
+        asked.add(seen(310, "minecraft:chest"));
+        asked.add(seen(320, "minecraft:furnace"));
+        assertEquals(2, m.loop.await(() -> m.autopilot.mergeRequested("main", asked)));
+        assertEquals(List.of("storage"), containerAt(200).roles());
+        assertEquals(List.of("storage"), containerAt(300).roles());
+        assertEquals(List.of("kit"), containerAt(310).roles());
+        assertEquals(List.of("furnace"), containerAt(320).roles());
+    }
+
+    @Test
+    void supplyInspectsUnknownContentsBeforeCallingItemsMissing() throws Exception {
+        bot = new Bot();
+        autopilot(Json.obj("supply", true));
+        until(() -> m.loop.await(() -> m.bots.require("bot1").online()), "online");
+        bot.chests.put("5,64,0", new HashMap<>(Map.of("minecraft:stone_pickaxe", 1, "minecraft:bread", 20,
+                "minecraft:cobblestone", 64)));
+        unknown(5, "minecraft:chest", "storage");
+        assertTrue(containerAt(5).snapshot() == null, "contents unknown");
+        queue(Json.obj("type", "mine", "args", Json.obj("blocks", Json.arr("minecraft:stone"), "amount", 10)));
+        until(() -> bot.types().contains("mine"), "mine dispatched");
+        assertEquals(List.of("inspect", "take", "mine"), bot.types(), "inspect first, then take what it holds");
+        assertTrue(!event("manual"), "nothing reported missing");
+    }
+
+    @Test
+    void craftWithoutGridGetsTheRecipeGridAndTable() throws Exception {
+        bot = new Bot();
+        bot.inv.put("minecraft:oak_log", 1);
+        autopilot(new JsonObject());
+        until(() -> m.loop.await(() -> m.bots.require("bot1").online()), "online");
+        unknown(3, "minecraft:crafting_table", "crafting");
+        queue(Json.obj("type", "craft", "args", Json.obj("item", "minecraft:oak_planks", "count", 4)));
+        queue(Json.obj("type", "craft", "args", Json.obj("item", "minecraft:wooden_pickaxe", "count", 1)));
+        until(() -> bot.types().size() >= 2, "both crafts dispatched");
+        JsonObject planks = bot.tasks.get(0).getAsJsonObject("args");
+        assertTrue(planks.has("grid") && planks.get("grid").toString().contains("minecraft:oak_log"), planks.toString());
+        assertTrue(!planks.has("table"), "2×2 fits the inventory grid");
+        JsonObject pick = bot.tasks.get(1).getAsJsonObject("args");
+        assertTrue(pick.has("grid"), pick.toString());
+        assertEquals(3, pick.getAsJsonObject("table").get("x").getAsInt(), "3×3: the known crafting table");
     }
 
     @Test

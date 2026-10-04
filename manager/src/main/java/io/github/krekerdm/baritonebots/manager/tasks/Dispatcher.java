@@ -326,6 +326,9 @@ public final class Dispatcher {
                 runStep(b, next);
                 continue;
             }
+            if (TaskTypes.CRAFT.equals(next.type())) {
+                m.goals.fillCraftGrid(b, next.args()); // before supply: it fetches the grid's ingredients
+            }
             if (m.autopilot.supply().wants(b, next)) {
                 // auto-supply: a manager step in front fetches tools / food / blocks / materials first
                 b.queue.pushFront(List.of(QueueEntry.of(STEP_SUPPLY, Json.obj("taskId", next.id(), "type", next.type(),

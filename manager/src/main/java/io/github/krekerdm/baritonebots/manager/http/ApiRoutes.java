@@ -505,7 +505,8 @@ final class ApiRoutes {
             JsonArray found = Json.getArr(Json.getObj(res, "data"), "containers");
             JsonArray list = found == null ? new JsonArray() : found;
             return loop(() -> {
-                int added = m.worlds.mergeDiscovered(sid, list, m.autopilot.roleChooser(sid));
+                m.autopilot.ensureHome(m.bots.require(botId));
+                int added = m.autopilot.mergeRequested(sid, list);
                 m.broadcastWorld(sid);
                 return Json.obj("found", list.size(), "added", added, "total", m.worlds.get(sid).containers.size(),
                         "world", m.worlds.get(sid).toJson());

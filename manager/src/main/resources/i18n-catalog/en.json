@@ -602,6 +602,7 @@
   "event.goal.skipped": "{bot}: skipped {item}: {reason}",
   "event.autopilot.manual": "{bot}: {task} needs {items}, which no container has; get them by hand",
   "event.autopilot.discovered": "{bot}: found {count} new containers within {radius} blocks",
+  "event.autopilot.home_auto": "{bot}: no home waypoint on this server, set home at {x} {y} {z} ({dim}); containers around it count as storage",
   "event.autopilot.adopted": "Chest at {x} {y} {z} now holds category {category}",
   "event.autopilot.sortFull": "Inbox at {x} {y} {z}: no room for {items}; add or free category chests",
   "event.order.blocked": "Standing order {item} is blocked: {items} must be added by hand",

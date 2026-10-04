@@ -215,7 +215,11 @@ public final class Autopilot {
             }
             ManagerConfig.AutopilotCfg cfg = cfg(b);
             QueueEntry cur = b.queue.current();
-            if (!cfg.discovery() || cur != null && m.catalog.isHeavy(cur.type())) {
+            if (!cfg.discovery()) {
+                continue;
+            }
+            ensureHome(b);
+            if (cur != null && m.catalog.isHeavy(cur.type())) {
                 continue; // idle-ish only: never in the middle of mining / building / exploring
             }
             Pos pos = Planner.posOf(b);
@@ -278,6 +282,54 @@ public final class Autopilot {
             }
             return List.of();
         };
+    }
+
+    /**
+     * Containers the user asked for ({@code POST /api/world/{id}/discover}): chests, barrels and shulker boxes are
+     * {@code storage}; known ones without a role of their own (none, or the autopilot's {@code found}) too.
+     *
+     * @return number of containers added
+     */
+    public int mergeRequested(String serverId, JsonArray found) {
+        WorldStore.RoleChooser chooser = (dim, pos, block) -> {
+            List<String> obvious = WorldStore.defaultRoles(block);
+            return obvious.isEmpty() ? List.of("storage") : obvious;
+        };
+        WorldDoc doc = m.worlds.get(serverId);
+        for (var e : found) {
+            Pos pos = e.isJsonObject() ? Pos.fromJson(e.getAsJsonObject().get("pos")) : null;
+            WorldDoc.Container c = pos == null ? null
+                    : doc.containerAt(Dims.normalize(Json.getString(e.getAsJsonObject(), "dim", Dims.OVERWORLD)), pos);
+            if (c != null && (c.roles().isEmpty() || c.roles().equals(List.of("found")))) {
+                m.worlds.setRoles(serverId, c, chooser.roles(c.dim(), c.pos(), c.block()));
+            }
+        }
+        return m.worlds.mergeDiscovered(serverId, found, chooser);
+    }
+
+    /**
+     * No home waypoint on the bot's server yet: a {@code home} at its position (event {@code home_auto}), so the
+     * containers around it count as storage; {@code found} ones already within {@code homeRadius} become storage.
+     */
+    public void ensureHome(BotState b) {
+        String sid = b.def.serverId();
+        Pos pos = Planner.posOf(b);
+        if (sid == null || pos == null || !b.online() || !homes(sid).isEmpty()) {
+            return;
+        }
+        String dim = b.status != null && b.status.dim() != null ? Dims.normalize(b.status.dim()) : Dims.OVERWORLD;
+        WorldDoc doc = m.worlds.get(sid);
+        doc.waypoints.add(new WorldDoc.Waypoint("home", dim, pos));
+        int r = m.config.get().autopilot().homeRadius();
+        for (WorldDoc.Container c : List.copyOf(doc.containers)) {
+            if (c.roles().equals(List.of("found")) && Dims.normalize(c.dim()).equals(dim) && c.pos().distance(pos) <= r) {
+                doc.replaceContainer(c.withRoles(List.of("storage")));
+            }
+        }
+        m.worlds.markDirty(sid);
+        m.event("home_auto", Levels.INFO, b.id, "event.autopilot.home_auto", Map.of("bot", b.id, "x", pos.x(),
+                "y", pos.y(), "z", pos.z(), "dim", dim));
+        m.broadcastWorld(sid);
     }
 
     /** Within {@code homeRadius} of the {@code home} waypoint or any bot's home waypoint of the server. */

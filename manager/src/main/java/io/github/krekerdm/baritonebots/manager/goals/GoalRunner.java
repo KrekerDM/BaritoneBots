@@ -419,6 +419,32 @@ public final class GoalRunner {
         fail(b, e, run, "no food in storage and nothing raw to cook");
     }
 
+    /**
+     * A {@code craft} (manual, scenario, rule) without {@code grid}: the grid of the item's first crafting recipe (the
+     * one auto-supply fetches for) and, when it needs a table, the nearest known one, like the obtain goal's craft.
+     */
+    public void fillCraftGrid(BotState b, JsonObject args) {
+        JsonArray grid = Json.getArr(args, "grid");
+        boolean given = args.has("grid") && !args.get("grid").isJsonNull() && (grid == null || !grid.isEmpty());
+        String item = Json.getString(args, "item", null);
+        GameData data = m.gameData.current();
+        if (given || item == null || item.isBlank() || data == null) {
+            return;
+        }
+        List<GameData.Recipe> recipes = data.craftingRecipesFor(item);
+        if (recipes.isEmpty()) {
+            return;
+        }
+        GameData.Recipe r = recipes.getFirst();
+        args.add("grid", GameData.craftingGridJson(r));
+        if (GameData.needsTable(r) && !args.has("table")) {
+            Pos table = world(b, Inventory.fromStatus(b.status)).table();
+            if (table != null) {
+                args.add("table", Json.toTree(table));
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ the world around the bot
 
     ObtainPlanner.World world(BotState b, Inventory inv) {
