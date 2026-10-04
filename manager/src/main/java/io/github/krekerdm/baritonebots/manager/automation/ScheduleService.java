@@ -19,7 +19,8 @@ import java.util.Map;
  * Schedules (SPEC §5.7b, config {@code schedules[]}): evaluated once per minute on the manager loop. A cron schedule
  * fires in every minute its expression matches (missed minutes up to 10 back are caught up); {@code day} /
  * {@code night} fire when the day or night starts (a transition, never at manager start). Day and night come from
- * the server profile's local {@code dayStart} / {@code nightStart} ({@link DayNight}). Loop-owned.
+ * the world day time an online bot of that server reports ({@code BotStatus.dayTime}), else from the server profile's
+ * local {@code dayStart} / {@code nightStart} ({@link DayNight}). Loop-owned.
  */
 public final class ScheduleService {
     public static final String DAY = "day";
@@ -67,7 +68,7 @@ public final class ScheduleService {
                     if (s.serverId() != null && !s.serverId().equalsIgnoreCase(sp.id())) {
                         continue;
                     }
-                    boolean isNight = isNight(sp, minute.toLocalTime());
+                    boolean isNight = isNight(sp, worldDayTime(sp.id()), minute.toLocalTime());
                     Boolean before = night.put(s.id() + "/" + sp.id(), isNight);
                     if (before != null && before != isNight && isNight == wantNight) {
                         fire(s, sp.id(), when);
@@ -82,11 +83,29 @@ public final class ScheduleService {
         }
     }
 
-    static boolean isNight(ManagerConfig.ServerProfile sp, LocalTime now) {
+    /** @param worldDayTime the server's world day time reported by an online bot, or null to use the profile's hours */
+    static boolean isNight(ManagerConfig.ServerProfile sp, Long worldDayTime, LocalTime now) {
         LocalTime day = DayNight.parse(sp.dayStart());
         LocalTime nightAt = DayNight.parse(sp.nightStart());
-        return DayNight.isNight(null, now, day == null ? LocalTime.of(7, 0) : day,
+        return DayNight.isNight(worldDayTime, now, day == null ? LocalTime.of(7, 0) : day,
                 nightAt == null ? LocalTime.of(22, 0) : nightAt);
+    }
+
+    /** World day time from the freshest status of an online bot on {@code serverId}, or null when none reports one. */
+    private Long worldDayTime(String serverId) {
+        Long best = null;
+        long bestAt = Long.MIN_VALUE;
+        for (BotState b : m.bots.all()) {
+            if (!b.online() || b.status == null || b.status.dayTime() == null
+                    || !String.valueOf(serverId).equalsIgnoreCase(String.valueOf(b.def.serverId()))) {
+                continue;
+            }
+            if (b.status.time() > bestAt) {
+                bestAt = b.status.time();
+                best = b.status.dayTime();
+            }
+        }
+        return best;
     }
 
     private Cron cron(String expr) {
@@ -151,7 +170,7 @@ public final class ScheduleService {
                 JsonObject n = new JsonObject();
                 for (ManagerConfig.ServerProfile sp : m.config.get().servers()) {
                     if (s.serverId() == null || s.serverId().equalsIgnoreCase(sp.id())) {
-                        n.addProperty(sp.id(), isNight(sp, now.toLocalTime()));
+                        n.addProperty(sp.id(), isNight(sp, worldDayTime(sp.id()), now.toLocalTime()));
                     }
                 }
                 o.add("night", n);

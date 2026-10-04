@@ -11,6 +11,4 @@ pluginManagement {
 
 rootProject.name = "BaritoneBots"
 
-include("common", "bot-mod", "manager")
-// The optional companion plugin is half-written (no main class yet) and ships in phase 2:
-// include("companion-plugin")
+include("common", "bot-mod", "manager", "companion-plugin")

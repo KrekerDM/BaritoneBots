@@ -1,0 +1,95 @@
+# BaritoneBots companion plugin
+# RU: Необязательный плагин для ботов BaritoneBots. Всё ниже действует только на ботов, прошедших проверку
+#     токеном (бот шлёт hello, плагин отвечает welcome). Обычные игроки ничего не замечают.
+# EN: Optional companion for BaritoneBots bots. Everything below applies only to bots that passed the token
+#     check (the bot sends hello, the plugin answers welcome). Regular players notice nothing.
+# RU: Применить изменения: /bb reload.  EN: Apply changes with /bb reload.
+
+# RU: Язык сообщений: ru или en.
+# EN: Message language: ru or en.
+language: en
+
+# RU: Общий секрет с менеджером. Создаётся при первом запуске; скопируйте его в менеджер (сервер -> companion -> token).
+#     Показать: /bb token. Оставьте пустым, чтобы создать новый (проверенные боты потеряют проверку).
+# EN: Secret shared with the manager. Generated on first start; copy it into the manager (server -> companion -> token).
+#     Show it with /bb token. Leave empty to generate a new one (verified bots lose their verification).
+token: ""
+
+# RU: Имя сервера, которое видят боты (только для отображения). Пусто = название ядра.
+# EN: Server name reported to bots (display only). Empty = the server software name.
+server-name: ""
+
+# RU: Ники ботов. Проверку токеном может пройти только игрок с ником из этого списка.
+# EN: Bot player names. Only a player with a name from this list can pass the token check.
+bots: []
+#  - Bot1
+#  - Bot2
+
+# RU: Защита ников: с ником из bots можно зайти только с этих адресов (IP, сеть CIDR или DDNS-имя домашнего ПК).
+# EN: Name protection: a name from bots may join only from these addresses (IP, CIDR network or the bot PC's DDNS name).
+protect-names:
+  # RU: Включить (без адресов не работает).  EN: Enable (does nothing while allowed-ips is empty).
+  enabled: false
+  # RU: Разрешённые адреса.  EN: Allowed addresses.
+  allowed-ips: []
+  #  - 203.0.113.7
+  #  - 192.168.1.0/24
+  #  - mybots.ddns.net
+
+# RU: Дальности для проверенных ботов: 2..32 чанка, -1 = как у сервера. Меньше дальность = меньше нагрузка.
+# EN: Distances for verified bots: 2..32 chunks, -1 = server value. Smaller distance = less server load.
+distances:
+  # RU: Включить.  EN: Enable.
+  enabled: true
+  # RU: Дальность прорисовки (чанки, которые бот держит загруженными).  EN: View distance (chunks kept loaded).
+  view: 4
+  # RU: Дальность симуляции (мобы, фермы, редстоун).  EN: Simulation distance (mobs, farms, redstone).
+  simulation: 3
+  # RU: Сколько чанков отправлять клиенту бота.  EN: Chunks sent to the bot's client.
+  send: 4
+  # RU: Спавнятся ли мобы вокруг бота.  EN: Whether mobs spawn around the bot.
+  affects-spawning: false
+
+# RU: Права, которые проверенный бот получает на время сессии ("-право" = запретить). Например, grim.exempt
+#     здесь освобождает от GrimAC ТОЛЬКО ботов, прошедших проверку токеном, а не любого игрока с ником бота.
+# EN: Permission nodes a verified bot gets for its session ("-node" denies). For example, grim.exempt here
+#     exempts from GrimAC ONLY token-verified bots, not anyone who joins with a bot's name.
+permissions: []
+#  - grim.exempt
+
+# RU: Автовход через AuthMe или nLogin после проверки (аккаунт бота должен быть зарегистрирован).
+# EN: Force login through AuthMe or nLogin after verification (the bot account must be registered).
+force-login:
+  # RU: Включить.  EN: Enable.
+  enabled: true
+  # RU: Задержка после проверки, в тиках (20 = 1 с).  EN: Delay after verification, in ticks (20 = 1 s).
+  delay-ticks: 10
+
+# RU: Журнал блоков, которые проверенные боты сломали и поставили (plugins/BaritoneBots/journal).
+# EN: Journal of blocks broken and placed by verified bots (plugins/BaritoneBots/journal).
+journal:
+  # RU: Включить.  EN: Enable.
+  enabled: true
+  # RU: Сколько дней хранить файлы.  EN: Days to keep the files.
+  retention-days: 14
+  # RU: Записей на бота в памяти за последние 24 ч (быстрые ответы).  EN: Records per bot kept in memory for the last 24 h.
+  memory-limit: 100000
+
+# RU: Откат изменений бота: /bb rollback <бот> <минуты> или запрос от менеджера.
+# EN: Rolling back a bot's changes: /bb rollback <bot> <minutes> or a request from the manager.
+rollback:
+  # RU: journal = по журналу этого плагина; command = консольная команда другого плагина (Prism, CoreProtect).
+  # EN: journal = from this plugin's journal; command = another plugin's console command (Prism, CoreProtect).
+  mode: journal
+  # RU: Команда для mode: command, без "/". {player} = ник бота, {minutes} = минуты. Синтаксис сверьте с документацией плагина.
+  # EN: Command for mode: command, without "/". {player} = bot name, {minutes} = minutes. Check your plugin's docs for the syntax.
+  #   Prism:       prism rollback p:{player} t:{minutes}m
+  #   CoreProtect: co rollback u:{player} t:{minutes}m r:#global
+  command: ""
+  # RU: Блоков за тик (mode: journal).  EN: Blocks restored per tick (mode: journal).
+  blocks-per-tick: 500
+  # RU: Больше блоков за один откат не трогать.  EN: Refuse rollbacks larger than this many blocks.
+  max-blocks: 200000
+
+# RU: Подробный лог в консоль.  EN: Verbose console log.
+debug: false

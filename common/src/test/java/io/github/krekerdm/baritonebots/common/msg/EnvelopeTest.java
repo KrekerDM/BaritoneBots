@@ -71,7 +71,7 @@ class EnvelopeTest {
                 null, 20, Map.of("minecraft:cobblestone", 64),
                 new BotStatus.TaskInfo("t1", TaskTypes.MINE, null, BotStatus.TaskInfo.RUNNING, "mining", -1),
                 new BotStatus.BaritoneInfo("MineProcess", true, "GoalBlock{1,2,3}", null),
-                new BotStatus.Perf(300, 1024, 0.12, 10, 45), 120, 1700000000000L);
+                new BotStatus.Perf(300, 1024, 0.12, 10, 45), 120, 1700000000000L, 18_000L);
         String line = Envelope.of(MessageTypes.STATUS, status).encode();
         assertTrue(line.contains("[\"minecraft:iron_helmet\",null,null,\"minecraft:iron_boots\"]"),
                 "empty armor slots stay as null array elements");

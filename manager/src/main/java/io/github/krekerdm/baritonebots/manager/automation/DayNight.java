@@ -4,9 +4,9 @@ import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 
 /**
- * Day or night for {@code day} / {@code night} schedules. A bot's world time would be the natural source (night =
- * ticks 13000..22999 of 24000), but {@code BotStatus} carries no world time today, so callers pass {@code null} and
- * the server profile's local {@code dayStart} / {@code nightStart} decide. Pure.
+ * Day or night for {@code day} / {@code night} schedules. The world time reported in {@code BotStatus.dayTime} wins
+ * when an online bot provides it (night = ticks 13000..22999 of 24000); otherwise callers pass {@code null} and the
+ * server profile's local {@code dayStart} / {@code nightStart} decide. Pure.
  */
 public final class DayNight {
     static final int NIGHT_FROM = 13_000;

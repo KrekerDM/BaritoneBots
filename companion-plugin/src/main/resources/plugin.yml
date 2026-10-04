@@ -1,0 +1,20 @@
+name: BaritoneBots
+version: '${version}'
+main: io.github.krekerdm.baritonebots.plugin.BaritoneBotsPlugin
+api-version: '26.2'
+description: Optional companion for BaritoneBots bots - token-verified perks, name protection, block journal and rollback.
+author: KrekerDM
+website: https://github.com/KrekerDM/BaritoneBots
+softdepend: [AuthMe, nLogin, Prism, LuckPerms]
+
+commands:
+  baritonebots:
+    description: BaritoneBots companion administration
+    usage: /<command> status | reload | rollback <bot> <minutes> | journal <bot> <minutes> | token
+    aliases: [bb]
+    permission: baritonebots.admin
+
+permissions:
+  baritonebots.admin:
+    description: Use /baritonebots (status, reload, rollback, journal, token)
+    default: op

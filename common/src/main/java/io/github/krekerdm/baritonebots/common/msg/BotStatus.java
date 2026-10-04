@@ -8,12 +8,14 @@ import java.util.Map;
 /**
  * Periodic bot snapshot (SPEC §2.5). {@code armor} has 4 entries head..feet, {@code null} for empty slots;
  * {@code items} sums the whole inventory by item id; optional fields are {@code null} when unknown.
+ * {@code dayTime} is the world's day time in ticks 0..23999 (overworld clock, as the client sees it), {@code null}
+ * when not in game or sent by an older mod.
  */
 public record BotStatus(String botId, String username, String state, String server, String dim, Vec3d pos,
                         float yaw, float pitch, float health, float maxHealth, int food, float saturation,
                         int xpLevel, List<String> armor, String mainHand, String offhand, int freeSlots,
                         Map<String, Integer> items, TaskInfo task, BaritoneInfo baritone, Perf perf,
-                        long uptimeSec, long time) {
+                        long uptimeSec, long time, Long dayTime) {
     public static final String STARTING = "starting";
     public static final String MENU = "menu";
     public static final String CONNECTING = "connecting";

@@ -62,6 +62,7 @@ Data lives in `BaritoneBots-data` next to the jar: settings, the panel token, bo
   lp user Bot1 parent add bots
   ```
   Grim checks `grim.exempt` every tick, so no rejoin is needed. After you remove it, the bot has to rejoin. In offline mode the permission follows the name, so give bots long AuthMe passwords.
+* **Companion plugin (optional).** If you run a Paper 26.2 server, `baritonebots-companion-<version>.jar` gives token-verified bots smaller view distances, permission nodes such as `grim.exempt` (only for verified bots, not for anyone using a bot's name), AuthMe / nLogin auto-login, name protection by IP, a block journal and rollback. See [docs/PLUGIN.md](docs/PLUGIN.md).
 * **Other servers.** The project contains no anticheat evasion. Running Baritone on someone else's server is at your own risk and subject to that server's rules.
 
 ## Tasks
@@ -72,7 +73,6 @@ Data lives in `BaritoneBots-data` next to the jar: settings, the panel token, bo
 
 * Shared projects: building a schematic with several bots, automatic roles. That is phase 2.
 * Crafting, smelting, animals and storage sorting.
-* The server companion plugin: block journal, rollback, Prism.
 * Microsoft accounts for online-mode servers. Offline accounts only for now.
 * Several bots in one JVM. Baritone cannot do it, so each bot is its own process of about 1 GB.
 * A test on a live public server: every number above comes from the local test server.
@@ -83,7 +83,7 @@ Data lives in `BaritoneBots-data` next to the jar: settings, the panel token, bo
 ./gradlew build
 ```
 
-Requires Java 25. Output: `manager/build/libs/baritonebots-manager-<version>.jar` with the mod inside. Design and protocol: [docs/SPEC.md](docs/SPEC.md); decisions taken during development: [docs/dev/DECISIONS.md](docs/dev/DECISIONS.md).
+Requires Java 25. Output: `manager/build/libs/baritonebots-manager-<version>.jar` with the mod inside, and the optional server plugin `companion-plugin/build/libs/baritonebots-companion-<version>.jar`. Design and protocol: [docs/SPEC.md](docs/SPEC.md); decisions taken during development: [docs/dev/DECISIONS.md](docs/dev/DECISIONS.md).
 
 ## Licence
 

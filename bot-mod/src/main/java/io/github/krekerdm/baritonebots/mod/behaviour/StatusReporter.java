@@ -108,7 +108,8 @@ public final class StatusReporter {
         String server = bot.connection.joined() || bot.connection.connecting() ? bot.connection.currentAddress() : null;
         if (!game) {
             return new BotStatus(cfg.botId(), cfg.username(), state, server, null, null, 0, 0, 0, 0, 0, 0, 0,
-                    List.of(), null, null, 0, Map.of(), bot.tasks.info(), baritoneInfo(), perf, bot.uptimeSec(), now);
+                    List.of(), null, null, 0, Map.of(), bot.tasks.info(), baritoneInfo(), perf, bot.uptimeSec(), now,
+                    null);
         }
         List<String> armor = new ArrayList<>(4);
         for (EquipmentSlot slot : Inv.ARMOR_HEAD_TO_FEET) {
@@ -118,7 +119,16 @@ public final class StatusReporter {
                 Positions.toVec3d(p.position()), p.getYRot(), p.getXRot(), p.getHealth(), p.getMaxHealth(),
                 p.getFoodData().getFoodLevel(), p.getFoodData().getSaturationLevel(), p.experienceLevel, armor,
                 McIds.item(p.getMainHandItem()), McIds.item(p.getOffhandItem()), Inv.freeSlots(p),
-                Inv.totals(p, false), bot.tasks.info(), baritoneInfo(), perf, bot.uptimeSec(), now);
+                Inv.totals(p, false), bot.tasks.info(), baritoneInfo(), perf, bot.uptimeSec(), now, dayTime());
+    }
+
+    /** Overworld clock (26.x world clocks) as the client sees it, folded to 0..23999; null when unavailable. */
+    private Long dayTime() {
+        try {
+            return bot.level() == null ? null : Math.floorMod(bot.level().getOverworldClockTime(), 24_000L);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private BotStatus.BaritoneInfo baritoneInfo() {
