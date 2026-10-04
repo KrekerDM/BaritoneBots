@@ -151,8 +151,27 @@ final class ApiRoutes {
         return a == null ? new JsonArray() : a;
     }
 
+    private static final String[] CYRILLIC_LATIN = {"a", "b", "v", "g", "d", "e", "zh", "z", "i", "y", "k", "l", "m",
+            "n", "o", "p", "r", "s", "t", "u", "f", "h", "ts", "ch", "sh", "sch", "", "y", "", "e", "yu", "ya"};
+
+    /** Russian names ("Ранен — домой") become readable ids ("ranen-domoy") instead of all collapsing to "item". */
+    static String transliterate(String s) {
+        StringBuilder b = new StringBuilder(s.length());
+        for (char c : s.toCharArray()) {
+            if (c >= 'а' && c <= 'я') {
+                b.append(CYRILLIC_LATIN[c - 'а']);
+            } else if (c == 'ё') {
+                b.append("e");
+            } else {
+                b.append(c);
+            }
+        }
+        return b.toString();
+    }
+
     static String slug(String s) {
-        String out = s == null ? "" : s.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]+", "-").replaceAll("^-+|-+$", "");
+        String out = s == null ? "" : transliterate(s.toLowerCase(Locale.ROOT))
+                .replaceAll("[^a-z0-9_-]+", "-").replaceAll("^-+|-+$", "");
         if (out.isEmpty()) {
             out = "item";
         }
