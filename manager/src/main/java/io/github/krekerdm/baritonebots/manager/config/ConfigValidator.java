@@ -240,6 +240,8 @@ public final class ConfigValidator {
         JsonObject defense = Json.getObj(Json.getObj(root, "behaviour"), "defense");
         regexes(Json.getStringList(defense, "avoidNamePatterns"), "behaviour.defense.avoidNamePatterns", errors);
 
+        noCoordinates(root, errors);
+
         JsonArray categories = Json.getArr(Json.getObj(root, "autopilot"), "categories");
         Set<String> catNames = new HashSet<>();
         for (int i = 0; categories != null && i < categories.size(); i++) {
@@ -278,6 +280,98 @@ public final class ConfigValidator {
             }
         }
         automation(root, serverIds, botIds, errors);
+    }
+
+    /** Container roles a sign word may stand for (besides {@code sorted:<category>}). */
+    public static final List<String> SIGN_ROLES = List.of("storage", "inbox", "kit", "supply", "fuel", "trash");
+    /** Tool kinds a keep profile may list. */
+    public static final List<String> TOOL_KINDS = List.of("pickaxe", "axe", "shovel", "hoe", "sword", "shears");
+
+    /** Owner commands, sign words, auto-trash and keep profiles (SPEC §5.7e, §5.7f). */
+    private static void noCoordinates(JsonObject root, Map<String, String> errors) {
+        JsonObject general = Json.getObj(root, "general");
+        String prefix = Json.getString(general, "commandPrefix", "!b");
+        if (prefix.isBlank() || prefix.length() > 8 || prefix.chars().anyMatch(Character::isWhitespace)) {
+            errors.putIfAbsent("general.commandPrefix", "pattern");
+        }
+        regexes(Json.getStringList(general, "ownerChatPatterns"), "general.ownerChatPatterns", errors);
+        String reply = Json.getString(general, "ownerReplyCommand", "/msg {player} {text}");
+        if (!reply.startsWith("/") || !reply.contains("{player}") || !reply.contains("{text}")) {
+            errors.putIfAbsent("general.ownerReplyCommand", "pattern");
+        }
+        JsonObject autopilot = Json.getObj(root, "autopilot");
+        JsonObject words = Json.getObj(autopilot, "signWords");
+        if (words != null) {
+            for (Map.Entry<String, JsonElement> e : words.entrySet()) {
+                String v = e.getValue().isJsonPrimitive() ? e.getValue().getAsString().trim() : "";
+                boolean ok = SIGN_ROLES.contains(v) || CATEGORY.matcher(v.startsWith("sorted:") ? v.substring(7) : v).matches();
+                if (e.getKey().isBlank() || e.getKey().length() > 32 || !ok) {
+                    errors.putIfAbsent("autopilot.signWords." + e.getKey(), "pattern");
+                }
+            }
+        }
+        JsonObject keep = Json.getObj(Json.getObj(autopilot, "autoTrash"), "keepCounts");
+        if (keep != null) {
+            for (Map.Entry<String, JsonElement> e : keep.entrySet()) {
+                if (!isNonNegativeInt(e.getValue())) {
+                    errors.putIfAbsent("autopilot.autoTrash.keepCounts." + e.getKey(), "range");
+                }
+            }
+        }
+        JsonElement profiles = root.get("keepProfiles");
+        if (profiles == null || profiles.isJsonNull()) {
+            return;
+        }
+        if (!profiles.isJsonObject()) {
+            errors.putIfAbsent("keepProfiles", "type");
+            return;
+        }
+        for (Map.Entry<String, JsonElement> e : profiles.getAsJsonObject().entrySet()) {
+            String p = "keepProfiles." + e.getKey();
+            if (e.getKey().isBlank() || e.getKey().length() > 32) {
+                errors.putIfAbsent(p, "pattern");
+            }
+            if (!e.getValue().isJsonObject()) {
+                errors.putIfAbsent(p, "type");
+                continue;
+            }
+            JsonObject o = e.getValue().getAsJsonObject();
+            if (!List.of("worn", "none").contains(Json.getString(o, "armor", "worn"))) {
+                errors.putIfAbsent(p + ".armor", "enum");
+            }
+            if (!List.of("best", "none").contains(Json.getString(o, "weapon", "best"))) {
+                errors.putIfAbsent(p + ".weapon", "enum");
+            }
+            JsonElement tools = o.get("tools");
+            if (tools != null && !tools.isJsonNull()) {
+                if (!tools.isJsonArray()) {
+                    errors.putIfAbsent(p + ".tools", "type");
+                } else {
+                    for (JsonElement t : tools.getAsJsonArray()) {
+                        if (!t.isJsonPrimitive() || !TOOL_KINDS.contains(t.getAsString())) {
+                            errors.putIfAbsent(p + ".tools", "enum");
+                        }
+                    }
+                }
+            }
+            JsonObject food = Json.getObj(o, "food");
+            if (food != null && !isNonNegativeInt(food.get("max"))) {
+                errors.putIfAbsent(p + ".food.max", "range");
+            }
+            JsonObject blocks = Json.getObj(o, "blocks");
+            if (blocks != null && blocks.has("count") && !isNonNegativeInt(blocks.get("count"))) {
+                errors.putIfAbsent(p + ".blocks.count", "range");
+            }
+        }
+    }
+
+    private static boolean isNonNegativeInt(JsonElement v) {
+        try {
+            return v != null && v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber() && v.getAsDouble() >= 0
+                    && v.getAsDouble() == Math.rint(v.getAsDouble()) && v.getAsDouble() <= 100_000;
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     private static io.github.krekerdm.baritonebots.manager.tasks.TaskCatalog catalog;

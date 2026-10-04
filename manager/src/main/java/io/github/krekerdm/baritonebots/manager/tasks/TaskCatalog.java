@@ -80,6 +80,39 @@ public final class TaskCatalog {
         return t != null && Json.getBool(t, "continuous", false);
     }
 
+    /** Arguments of a task / manager step that accept position references ({@code "refs": true}): name → type. */
+    public Map<String, String> refArgs(String type) {
+        JsonObject def = tasks.containsKey(type) ? tasks.get(type) : steps.get(type);
+        return refArgsOf(def);
+    }
+
+    /** Same for a project kind's config. */
+    public Map<String, String> projectRefArgs(String kind) {
+        JsonArray kinds = Json.getArr(json, "projectKinds");
+        if (kinds != null) {
+            for (JsonElement k : kinds) {
+                if (kind.equals(Json.getString(k.getAsJsonObject(), "kind", ""))) {
+                    return refArgsOf(k.getAsJsonObject());
+                }
+            }
+        }
+        return Map.of();
+    }
+
+    private static Map<String, String> refArgsOf(JsonObject def) {
+        Map<String, String> out = new LinkedHashMap<>();
+        JsonArray args = def == null ? null : Json.getArr(def, "args");
+        if (args != null) {
+            for (JsonElement a : args) {
+                JsonObject o = a.getAsJsonObject();
+                if (Json.getBool(o, "refs", false)) {
+                    out.put(Json.getString(o, "name", ""), Json.getString(o, "type", "pos"));
+                }
+            }
+        }
+        return out;
+    }
+
     /**
      * Copy of {@code args} with form values coerced to their declared types.
      *
@@ -120,6 +153,9 @@ public final class TaskCatalog {
         }
         if ("build".equals(type) && out.has("rotation")) {
             out.addProperty("rotation", Json.getInt(out, "rotation", 0));
+        }
+        if ("goto".equals(type) && !out.has("pos") && (!out.has("x") || !out.has("z"))) {
+            throw new BadArgsException(type, out.has("x") ? "z" : "x", "required"); // x + z, or a pos reference
         }
         return out;
     }

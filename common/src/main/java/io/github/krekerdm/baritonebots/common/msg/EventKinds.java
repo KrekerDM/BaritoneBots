@@ -28,9 +28,14 @@ public final class EventKinds {
     /** data.state = verified | rejected | absent */
     public static final String COMPANION = "companion";
     public static final String ERROR = "error";
+    /**
+     * A chat line from the owner starting with the command prefix (SPEC §5.7e); data.text (without the prefix),
+     * player, via (chat | whisper | system), pos, dim, yaw, pitch, lookBlock, lookBlockId (null when unknown).
+     */
+    public static final String OWNER_COMMAND = "owner_command";
 
     public static final List<String> ALL = List.of(JOINED, DISCONNECTED, KICKED, LOGIN_OK, LOGIN_FAILED, DEATH,
-            RESPAWNED, DAMAGED, THREAT, INVENTORY_FULL, TOOL_LOW, FOOD_LOW, CHAT, COMPANION, ERROR);
+            RESPAWNED, DAMAGED, THREAT, INVENTORY_FULL, TOOL_LOW, FOOD_LOW, CHAT, COMPANION, ERROR, OWNER_COMMAND);
 
     /** {@code companion} event states. */
     public static final String COMPANION_VERIFIED = "verified";

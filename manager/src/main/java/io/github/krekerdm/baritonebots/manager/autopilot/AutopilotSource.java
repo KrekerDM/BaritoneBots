@@ -163,7 +163,8 @@ final class AutopilotSource implements WorkSource {
         boolean changed = false;
         for (WorldDoc.Container c : List.copyOf(doc.containers)) {
             if (!c.hasRole("storage") || c.sortedCategory() != null || c.hasRole("inbox") || c.hasRole("kit")
-                    || c.hasRole("supply") || c.hasRole("fuel") || c.snapshot() == null || c.snapshot().items().isEmpty()) {
+                    || c.hasRole("supply") || c.hasRole("fuel") || c.hasRole("trash") || c.fromSign()
+                    || c.snapshot() == null || c.snapshot().items().isEmpty()) {
                 continue;
             }
             String cat = cats.adopt(c.snapshot().totals());

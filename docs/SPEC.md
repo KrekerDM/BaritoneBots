@@ -92,12 +92,15 @@ Manager → `welcome` d: `{"config": BotConfig}` or → `reject` d: `{"reason":"
 |---|---|---|
 | `inventory` | — | `{"slots":[{"slot":int,"item":id,"count":int,"damage":int,"maxDamage":int,"name":str?}], "armor":[id|null ×4 head..feet], "offhand":id|null, "selected":int}` |
 | `entities` | `{"radius":int,"types":[id]?}` | `{"entities":[{"type":id,"name":str?,"x","y","z","health":float?,"baby":bool?,"player":bool}]}` |
-| `containers_nearby` | `{"radius":int}` | `{"containers":[{"pos","dim","block":id}]}` — every chest, trapped chest, barrel, shulker box, furnace, blast furnace, smoker, crafting table, hopper, dispenser, dropper within radius (loaded block entities + crafting tables by block scan) |
+| `containers_nearby` | `{"radius":int}` | `{"containers":[{"pos","dim","block":id,"signText":str?,"frameItem":id?}]}` — every chest, trapped chest, barrel, shulker box, furnace, blast furnace, smoker, crafting table, hopper, dispenser, dropper within radius (loaded block entities + crafting tables by block scan); `signText` / `frameItem` as in `ContainerSnapshot` (§2.5) |
 | `bom` | `{"file":abs path,"origin":pos,"rotation":0|90|180|270,"mirror":"none|front_back|left_right","box":Box?}` | `{"items":{id:count},"blocks":int}` — items needed for the (masked) schematic, using MC rules (double slab = 2 slabs, upper door/bed head/upper tall-plant halves count 0, etc.) |
 | `progress` | same args as `bom` | `{"total":int,"correct":int,"missing":int,"wrong":int,"unloaded":int,"remaining":{id:count},"sectorBox":Box?}` — compares world with schematic for positions in loaded chunks only |
 | `block_at` | `{"pos"}` | `{"block":"minecraft:oak_stairs[facing=north,…]","loaded":bool}` |
 | `player` | `{"name":str}` | `{"found":bool,"pos":pos?,"dim":id?}` (only players in the bot's tracked range) |
 | `recipe_book` | `{"item":id}` | `{"recipes":[{"displayId":int,"craftingTable":bool}]}` known to the bot's client recipe book |
+| `owner` | `{"name":str?}` (default `config.owner.player`) | `{"found":bool,"pos":pos?,"dim":id?,"yaw":float?,"pitch":float?,"lookBlock":pos?,"lookBlockId":id?}` — the player's tracked entity: block position, head yaw / pitch, and the first block outline hit by a ray from the eyes along yaw / pitch within 64 blocks (`ClipContext.Block.OUTLINE`, fluids ignored), else `null` |
+| `scan_blocks` | `{"center":pos?,"radius":int ≤ 96,"dy":int?,"ids":[glob]?,"tags":[block tag]?,"gap":int 1..8 = 2,"maxClusters":int ≤ 256 = 32}` | `{"clusters":[{"box":Box,"count":int,"ids":{id:count}}],"total":int,"truncated":bool,"unloadedChunks":int}` — matching blocks in the loaded chunks of `center ± radius` (vertically `± dy`, default radius; centre default = the bot), grouped into clusters: cubic cells of `gap` blocks joined when they touch (26-neighbourhood); largest first. Computed across ticks within 15 ms per tick (same queue as `bom` / `progress`); at most 50 000 cells (`truncated`) |
+| `heightmap` | `{"center":pos?,"radius":int ≤ 96 = 32}` | `{"x0","z0","size":int,"heights":[int|null],"surface":str,"unloaded":int}` — row-major (z outer, x inner) `size × size` grid from `x0,z0`: y of the top block of the client's WORLD_SURFACE heightmap, below replaceable plants / snow layers; `null` = chunk not loaded; `surface` one char per column: `.` ground, `w` liquid, `t` leaves / logs, `?` not loaded |
 
 ### 2.5 Payload types (Java records in `common.msg`)
 
@@ -117,7 +120,8 @@ BotConfig {
   protection{ enabled:bool, noBreak:[glob], zones:[{dim, box}] },
   baritone { settingName: value, … },       // applied by reflection on BaritoneAPI.getSettings(); unknown names logged and skipped
   client   { lowPower:bool, skipRender:bool, muteSounds:bool, maxFps:int, renderDistance:int },
-  status   { activeIntervalTicks:int, idleIntervalTicks:int }
+  status   { activeIntervalTicks:int, idleIntervalTicks:int },
+  owner    { player:str ("" = off), prefix:"!b", patterns:[regex] }   // §5.7e; from general.ownerPlayer / commandPrefix / ownerChatPatterns
 }
 
 TaskSpec   { id, type, args:{…}, timeoutSec:int (0 = none), label:str?, origin:str? }   // origin: "panel", "scenario:<runId>", "project:<id>"
@@ -130,11 +134,13 @@ BotStatus  { botId, username, state, server:str?, dim:str?, pos:{x,y,z doubles}?
              perf:{heapUsedMb, heapMaxMb, cpu:double 0..1, fps:int, pingMs:int}, uptimeSec, time, dayTime:long? (world day time 0..23999, overworld clock) }
              state ∈ starting|menu|connecting|logging_in|online|dead|disconnected
 BotEvent   { kind, level:"info|warn|error", message, data:{…}?, time }
-ContainerSnapshot { dim, pos, block:id, size:int, free:int, items:[{slot,item,count}], time, open:bool }
+ContainerSnapshot { dim, pos, block:id, size:int, free:int, items:[{slot,item,count}], time, open:bool,
+                    signText:str? (lower-cased text of the signs on / at the container, null = none), frameItem:id? (item in a frame on it) }
 ```
+A sign counts for a container when it is a wall (or wall hanging) sign fixed to it, a standing sign on top of it, a ceiling hanging sign under it, or a wall sign fixed to the block right above it; both halves of a double chest count, and front and back texts are joined. An item frame counts when it hangs on the container.
 
 ### 2.6 Event kinds (`BotEvent.kind`)
-`joined` · `disconnected` (data.reason) · `kicked` (data.reason) · `login_ok` · `login_failed` · `death` (data.pos, dim, cause) · `respawned` · `damaged` (only when health drops ≥ 4 in 1 s; data.source) · `threat` (hostile/boss nearby; data.type, pos) · `inventory_full` · `tool_low` (data.item, durabilityLeft) · `food_low` (no food in inventory) · `chat` (system or whisper lines matching nothing else; data.text) · `companion` (data.state = `verified|rejected|absent`) · `error`.
+`joined` · `disconnected` (data.reason) · `kicked` (data.reason) · `login_ok` · `login_failed` · `death` (data.pos, dim, cause) · `respawned` · `damaged` (only when health drops ≥ 4 in 1 s; data.source) · `threat` (hostile/boss nearby; data.type, pos) · `inventory_full` · `tool_low` (data.item, durabilityLeft) · `food_low` (no food in inventory) · `chat` (system or whisper lines matching nothing else; data.text) · `companion` (data.state = `verified|rejected|absent`) · `error` · `owner_command` (§5.7e: a chat line of `config.owner.player` starting with the prefix — signed player chat by its sender, system lines through `owner.patterns`; data `{text (after the prefix), player, via:"chat|whisper|system", pos, dim, yaw, pitch, lookBlock, lookBlockId}` computed like the `owner` query, `pos` null when the owner is not tracked; at most 5 per second; such lines are never also sent as `chat`).
 
 ## 3. Task catalog (executed by the bot mod)
 
@@ -144,7 +150,7 @@ Every task: start on the client thread, update `step`/`progress`, never block th
 
 | type | args | done / result |
 |---|---|---|
-| `goto` | `x`,`z`,`y?`,`range?=2` | in goal → ok; process stopped elsewhere → `path_failed` |
+| `goto` | `x`,`z`,`y?`,`range?=2` (the manager also accepts `pos` = a position reference and sends it as x/y/z) | in goal → ok; process stopped elsewhere → `path_failed` |
 | `goto_player` | `player`,`range?=3` | ok on arrival; `not_found` if the player is not tracked |
 | `follow` | `player`,`radius?=3` | continuous until cancelled/timeout |
 | `explore` | `x?`,`z?` | continuous (Baritone explore) |
@@ -155,11 +161,11 @@ Every task: start on the client thread, update `step`/`progress`, never block th
 | `build` | `file`, `origin`, `rotation?=0`, `mirror?="none"`, `box?` (world-space mask = this bot's sector), `name?` | builder inactive & not paused → ok; paused → `missing_materials` with data.missing `{id:count}` computed for the masked region vs inventory |
 | `collect_drops` | `radius?=8`, `items?:[glob]` | no matching item entities left → ok |
 | `take` | `container:pos`, `items:[{item:glob,count:int(-1 = all)}]` | ok with data `{taken:{id:count}, missing:{glob:count}}` (missing is not a failure) |
-| `deposit` | `containers:[pos]`, `keep?:[glob]`, `keepCounts?:{glob:count}`, `only?:[glob]` | ok with data `{moved:{id:count}, left:{id:count}}` |
+| `deposit` | `containers:[pos]`, `keep?:[glob]`, `keepCounts?:{glob:count}`, `only?:[glob]`, `slots?:[{slot,item,count}]` (exactly these inventory stacks, 0..35; a stack whose item changed is skipped; the filters are then ignored) | ok with data `{moved:{id:count}, left:{id:count}}` |
 | `transfer` | `from:pos`, `to:[pos]`, `items:[{item,count}]` | take + deposit in one task |
 | `inspect` | `containers:[pos]` | opens each, snapshots (§2.3 `container`), closes; ok with data `{seen:int,failed:[pos]}` |
 | `equip` | `armor?=true`, `offhand?:glob` | equips best armor (by protection then durability) from inventory |
-| `drop` | `items:[{item:glob,count}]` | throws items |
+| `drop` | `items?:[{item:glob,count}]`, `slots?:[{slot,item,count}]` (one of them; slots as for `deposit`) | throws items |
 | `craft` | `item`, `count`, `table?:pos`, `grid?:[[ [id…] or null ]×3]×3` | recipe book first (`handlePlaceRecipe`), else manual placement from `grid` (each cell = list of acceptable ids). ok data `{crafted:int}`; `missing_materials` |
 | `smelt_load` | `furnace:pos`, `input:glob`, `count`, `fuel:glob`, `fuelCount` | ok data `{loaded:int, fuel:int, collected:{id:count}}` |
 | `smelt_collect` | `furnace:pos`, `all?=false` | ok data `{collected:{id:count}}` |
@@ -224,7 +230,8 @@ bots/<botId>/logs/launcher.log
 
 ### 5.3 Settings (`config.json`) — every field has a default; the panel edits all of them
 ```text
-general  { language:"ru|en", ownerPlayer:str, panel{bind:"127.0.0.1", port:8765, openBrowser:true}, link{bind:"127.0.0.1", port:25590},
+general  { language:"ru|en", ownerPlayer:str, commandPrefix:"!b", ownerChatPatterns:[regex] (§5.7e), ownerReplyCommand:"/msg {player} {text}",
+           panel{bind:"127.0.0.1", port:8765, openBrowser:true}, link{bind:"127.0.0.1", port:25590},
            tray:bool, autoStartBots:bool, eventLogLimit:int }
 runtime  { minecraftVersion:"26.2", fabricLoader:"0.19.5", headlessmcVersion:"2.10.0", headlessmcUrl, javaPath:str? (null = the manager's own java if ≥ 25, else HeadlessMC auto-download),
            mods:[{id, name, url, sha512?, enabled}],   // fabric-api, baritone-api, ferritecore; our mod is always added from the manager jar
@@ -244,7 +251,9 @@ planner  { tickSec:int=5, roleSwitchCooldownSec:int=120, maxBuildersPerSector:in
 autopilot{ supply:bool=true, sort:bool=true, idleWork:bool=true, discovery:bool=true, discoveryRadius:int=32, discoveryIntervalSec:int=60,
            inspectMaxAgeMin:int=120 (0 = only never-seen), maxInspectPerTick:int=2, homeRadius:int=24, useFound:bool=false,
            foodMin:int=8, blocksMin:int=32, toolMinDurability:double=0.1, stuckSec:int=60 (0 = off), idleHomeSec:int=60,
-           throwaway:[glob], smeltInputs:[glob], categories:[{name, globs:[glob|#tag]}] }      // §5.7a
+           throwaway:[glob], smeltInputs:[glob], categories:[{name, globs:[glob|#tag]}],      // §5.7a
+           signWords:{word: role|sorted:<category>} (§5.7e), autoTrash:{enabled:true, junk:[glob], keepCounts:{glob:count}} (§5.7f) }
+keepProfiles { name → {armor:"worn|none", weapon:"best|none", tools:[pickaxe|axe|shovel|hoe|sword|shears], food:{max}, blocks:{globs, count}, extra:[glob]} }   // §5.7f, default «снаряжение»
 orders   [ { id, enabled:bool=true, serverId, item, min:int, max:int?, into:"storage|supply|kit|fuel|inbox|sorted:<category>|<containerId>" } ]
 schedules[ { id, name, enabled:bool=true, serverId?, when:"<5-field cron>|day|night", botIds:"any|all"|[botId], steps:[TaskTemplate|managerStep], priority:"normal|high" } ]   // §5.7b
 rules    [ { id, name, enabled:bool=true, serverId?, if:{one trigger}, then:[steps], botIds:"any|all"|[botId], cooldownSec:int=300, priority:"normal|high" } ]          // §5.7b   // §5.7b
@@ -256,12 +265,12 @@ Memory presets: eco 768 MB, normal 1024 MB, performance 2048 MB (Xmx per bot). R
 
 ### 5.5 Queues, scenarios, kits
 * Per bot: `current` + `queue` of TaskSpec templates. Add modes `append|front|replace`. When a task finishes the next one is dispatched. Manual tasks pause project work for that bot until the queue is empty.
-* Manager-side step types (expanded at dispatch time, never sent to the bot): `kit <kitId>`, `deposit_storage`, `home`, `wait <sec>`, `goto_waypoint <name>`, `sort_storage` (one sorting round over the bot's inboxes, §5.7a), `smelt_all {inputs?, fuel?}` (collect every result and load every empty furnace with role `furnace` within 64 blocks: input of most stock from `inputs` — default `autopilot.smeltInputs` — and fuel from the source containers, fuel role first; then `deposit_storage`; never-inspected furnaces are inspected first), `obtain {item, count}` and `progress {tier}` (§5.7b2); `supply` is internal (inserted by auto-supply, §5.7a). `deposit_storage` deposits into `inbox` containers first, then `storage`; with auto-sort on and no inbox it first deposits each category into its `sorted:<category>` chests.
+* Manager-side step types (expanded at dispatch time, never sent to the bot): `kit <kitId>`, `deposit_storage`, `home`, `wait <sec>`, `goto_waypoint <name>`, `sort_storage` (one sorting round over the bot's inboxes, §5.7a), `smelt_all {inputs?, fuel?}` (collect every result and load every empty furnace with role `furnace` within 64 blocks: input of most stock from `inputs` — default `autopilot.smeltInputs` — and fuel from the source containers, fuel role first; then `deposit_storage`; never-inspected furnaces are inspected first), `obtain {item, count}` and `progress {tier}` (§5.7b2), `trash {profile?, to?}` (§5.7f); `supply` (inserted by auto-supply, §5.7a) and `resolve` (inserted in front of a task whose arguments hold position references, §5.7e) are internal. `deposit_storage` deposits into `inbox` containers first, then `storage`; with auto-sort on and no inbox it first deposits each category into its `sorted:<category>` chests.
 * Scenario: `{id, name, steps:[TaskTemplate | managerStep], repeat:bool}`; a run expands into the queue with `origin = scenario:<runId>`; on failure with `inventory_full` the manager inserts `deposit_storage` and retries the step (max 50 per run); other failures stop the run.
 * Kit: `{id, name, slots:{slotName:{any:[glob], count:int}}}` planned against the container index (containers with role `kit`, then `storage`): skip slots already satisfied by the bot's inventory/armor (position in `any` = rank), produce `take` tasks grouped per container ordered nearest-neighbour, then `equip`. Unknown container contents → `inspect` first.
 
 ### 5.6 World knowledge (per server profile)
-Waypoints `{name, dim, pos}` (`home` is special) · Areas `{name, dim, box}` · Containers `{id, dim, pos, block, roles:[kit|storage|supply|fuel|inbox|sorted:<category>|furnace|crafting|found], label, snapshot, lastSeen}` — snapshots from any bot's `container` message update it; `found` = discovered outside the home area (a source only with `autopilot.useFound`) · Protected zones · Death log.
+Waypoints `{name, dim, pos}` (`home` is special) · Areas `{name, dim, box}` · Containers `{id, dim, pos, block, roles:[kit|storage|supply|fuel|inbox|sorted:<category>|furnace|crafting|found|trash], label, snapshot, lastSeen, signText?, frameItem?, roleSource:"manual|sign|auto"?}` — snapshots from any bot's `container` message update it; `found` = discovered outside the home area (a source only with `autopilot.useFound`); `trash` = where `trash {to:"trash_chest"}` unloads (never a source); `roleSource` records who set the roles (precedence manual > sign > auto, §5.7e; roles changed through `PUT /api/world` become `manual`; older entries without it count as manual when they carry inbox / kit / supply / fuel / trash) · Protected zones · Death log.
 
 ### 5.7 Projects and automatic roles
 Project kinds: `build`, `gather` (item quotas into storage), `clear` (area), `farm` (field + deposit), `ranch` (pen), `sort` (inbox → categories), `smelt` (furnace array). A project has `bots:[botId] | "any"`, status `draft|running|paused|done|failed`, kind-specific config and progress (`progress.done/total/percent` where it makes sense, otherwise counters and a rate), plus its live `assignments`; problems are `project_blocked` events (10 min throttle per key) and `blocked[]` in the view, completion is `project_done`.
@@ -318,6 +327,29 @@ The user wants to hand over one project and have it distributed and watched in r
 * **Panel**: a "Диспетчер" feed per project with the AI's summary in plain language ("43 %, Bot2 ждёт стекло, песка нет, Bot4 переведён на песок, ETA 25 мин"), pending suggestions with Apply / Dismiss, and the action log.
 If the model is unreachable or returns invalid JSON, the planner continues alone and the feed says so.
 
+### 5.7e No coordinates in daily use
+The user does not want to type coordinates. Every place that takes a position or a box must also accept a *reference* that the manager resolves at dispatch time, and the panel forms default to references; raw x/y/z stays available behind "вручную".
+
+References: `{"ref":"home"}`, `{"ref":"waypoint","name":…}`, `{"ref":"owner"}` (the owner player's position — `general.ownerPlayer`, seen by any online bot through the `owner` query, §2.4), `{"ref":"owner_look"}` (block the owner is looking at: the mod ray-casts from the owner entity's synced eye position + yaw/pitch, max 64 blocks), `{"ref":"bot","id":…}`, `{"ref":"auto"}` (kind-specific detection below). Boxes: `{"ref":"area","name":…}`, `{"ref":"auto"}`, or two references.
+
+* **In-game commands from the owner.** The mod forwards chat lines from `ownerPlayer` that start with `general.commandPrefix` (default `!b`), public or whispered (`/msg Bot1 !b …`), as event `owner_command {text, pos, dim, yaw, pitch, lookBlock}`. Manager commands: `here <name>` (waypoint at owner), `home` (set home at owner), `pos1` / `pos2` → `area <name>` (box from looked-at blocks), `chest storage|inbox|kit|<category>` (role/category for the looked-at container), `come`, `follow`, `stop`, `build <schematic> [rotate]` (origin = looked-at block, rotation from the owner's facing), `farm`, `ranch`, `progress iron`, `obtain <item> [n]`. Replies go back as a whisper from one bot (rate-limited). The AI command box (§5.7c) accepts the same intents.
+* **Signs on chests.** The mod reports sign texts on/next to containers in container snapshots and `containers_nearby` (`signText`). Words map to roles/categories (configurable dictionary, RU + EN defaults: «склад/storage», «приём/inbox», «кит/kit», «руда/ores», «дерево/wood», «камень/stone», «еда/food», «инструменты/tools», «редстоун/redstone», «ферма/farming», «мобы/mob», «разное/misc»). An item frame on a chest showing an item = that item's category.
+* **Auto-detection** (mod query `scan_blocks {center, radius, ids|tags}` returning compact clusters): farm fields = clusters of farmland/crops near home; pens = fence/wall-enclosed regions containing animals of a type; furnaces/crafting tables already come from discovery; build site for `{"ref":"auto"}` = the nearest flat spot (heightmap variance ≤ 1) that fits the footprint, outside other projects and protected zones, within `homeRadius`.
+* **Panel**: every position/box field is a picker — «Дом», «Где я стою», «Куда я смотрю», «Возле бота», «Точка…», «Область…», «Найти автоматически», «Вручную (x y z)».
+
+Implementation (contract details):
+* **Where references are accepted.** Catalog arguments marked `"refs": true` (types `pos`, `box`, `container`, `containers` of tasks and project kinds; `goto` gains `pos`); `/api/catalog` → `refs` lists the reference kinds per type, labels `ref.<kind>` in both catalogs. Bot tasks are resolved at dispatch time: the dispatcher puts the internal step `resolve` in front of a task whose reference arguments hold references, the bot only ever receives coordinates, and an unresolvable reference fails the task with reason `ref_no_owner|ref_no_look|ref_no_home|ref_no_waypoint|ref_no_bot|ref_no_area|ref_auto_none|ref_wrong_dim|bad_ref` (event `ref_failed`); scenarios, schedules and rules keep their references and resolve on every run. Project configs (`POST/PUT /api/projects`, `placement` included) and world edits (`PUT /api/world/{id}`: `waypoints[].pos`, `areas[].box`, `zones[].box`; a missing `dim` is taken from the reference) are resolved when saved; failures answer 400 with the reason as `error`. `home` = the bot's home waypoint for bot tasks, else `home` / any bot's home of the server; references must lie in the bot's (project's) dimension.
+* **Owner** = the first online bot of the server whose `owner` query finds the owner (cached 1.5 s). `owner_command` events are handled once per server and text within 2.5 s (every bot hears a public line). Targets: a whispered command addresses the bot it was whispered to; otherwise `come`, `follow`, `stop`, `trash` go to every online bot of the server and `progress`, `obtain` to the best free bot; a word `@<bot>` / `@all` / `@any` (`@все`, `@любой`) overrides. Russian aliases exist for every verb (`сюда`/«ко мне», «за мной», `стоп`, `точка`, `дом`, `поз1`, `поз2`, `область`, `сундук`, `строй`, `ферма`, `ранчо`, `мусор`, `прогресс`, `добудь`). `here <name>` / `home` = waypoint at the owner's block; `pos1` / `pos2` = looked-at block (else the owner's position) remembered per server, `area <name>` saves the box; `chest <word>` = role from the sign dictionary, a role name or a category for the looked-at container (added to the index when it is a container block; source `manual`); `come` = `goto` to the owner (range 2), `follow` = `follow` the owner, both replacing the queue; `stop` = clear queue + cancel; `build <schematic> [0|90|180|270]` = a `build` project (`bots:"any"`, started) with origin = looked-at block + 1 up and, without an explicit angle, rotation from the owner's yaw so the schematic extends away from the owner (yaw 0 → 0°, 90 → 90°, ±180 → 180°, −90 → 270°); `farm` / `ranch [animal]` = start the server's project of that kind, else create one with `box: {"ref":"auto"}`; `trash [store|chest]`, `progress <tier>`, `obtain <item> [n]` = those steps (origin `owner`, manual). Replies: `general.ownerReplyCommand` from the bot that heard the command, `owner.reply.*` texts in `general.language`, at most one per second per server, unknown commands get the help line.
+* **Signs.** Labels are stored on the container (`signText`, `frameItem`) from snapshots and `containers_nearby`, then mapped with `autopilot.signWords`: a dictionary word matches the same word or (4+ letters) a longer word starting with it, `ё` = `е`; all roles of the sign plus its first category; without sign words a framed item gives that item's category. Manual roles are never touched; sign roles replace automatic ones (source `sign`; category adoption skips them); when the label disappears the container gets its automatic default roles back.
+* **Auto-detection** scans through the online bot nearest to the place (≤ 128 blocks; a client only knows its loaded chunks): the place is the home waypoint (else the bot). Farm field = nearest farmland cluster (`scan_blocks ids:[farmland] gap 2`, ≥ 4 blocks) within `max(48, min(96, 2·homeRadius))`, box = cluster + 1 layer up (a `farm` task without `range` gets one covering it). Pen = the fence / wall / gate cluster (`gap 1`, ≥ 8 blocks) holding the most animals of the type (any farm animal when none is given; an `entities` query), box + 1 up; a ranch project without `animal` takes the most frequent one. Build site = the nearest `w × l` footprint (schematic loaded by the manager, rotated) on a `heightmap` with ground only (no liquid / trees / unloaded columns), heights within 1, centre within `max(16, min(96, homeRadius))` of home, not touching (1-block margin) other projects' boxes / footprints, protected zones or indexed containers; origin y = highest ground + 1. Container lists: `deposit` / storage-like arguments → inbox + storage containers, `supply` → role supply, `furnaces` → role furnace, `inbox` → role inbox, `inspect` → never-inspected containers within 32 blocks (nearest first, at most 16).
+
+### 5.7f Inventory hygiene: keep profiles and trash
+* Settings `keepProfiles {name → {armor:"worn", weapon:"best", tools:["pickaxe","axe","shovel"?…] (best one of each kind by tier, then durability), food:{max}, blocks:{globs, count}, extra:[glob]}}`; default profile «снаряжение» = worn armor + best sword + best axe + best pickaxe + food up to 64 + 64 throwaway blocks. Duplicates of a kept kind beyond the best one count as junk.
+* Manager step `trash {profile, to: "drop"|"store"|"trash_chest"}` (labels «Выбросить мусор» / «Сдать лишнее»): from the live inventory, everything outside the profile is thrown (`drop`), stored (`deposit_storage`) or put into a container with role `trash`. Available from the panel (one button on the bot page), in scenarios, rules and as owner chat command `!b trash`.
+* Autopilot option `autoTrash {enabled, junk:[globs] (defaults: dirt, coarse_dirt, gravel, sand overflow, granite, diorite, andesite, tuff, cobbled_deepslate overflow, rotten_flesh, poisonous_potato, spider_eye, seeds beyond 64), keepCounts}`: when the inventory is full during mining/clearing, junk is thrown on the spot instead of walking to storage.
+
+Implementation (contract details): the step reads the live `inventory`, plans with the profile in this order — `extra` globs keep whole stacks; inventory armor is kept only when it beats the worn piece of its slot (best one per slot); `weapon:"best"` keeps the best sword; each listed tool kind keeps its best tool by tier, then durability (other tools of the kind are duplicates; a tool kept by `extra` counts as that best one); food (no harmful food, no `autoEat.avoid`) up to `food.max`, best food first; `blocks.globs` (empty = `autopilot.throwaway`) up to `blocks.count`, largest stacks first; everything else is surplus. Worn armor and the offhand are never touched; for `drop` and `trash_chest` shulker boxes, named items and rare loot (diamonds, emeralds, netherite, elytra, totems, …) are never surplus. It expands into one `drop` / `deposit` with `slots` (store = inbox then storage containers, trash chest = role `trash` within 160 blocks; none → `not_found`). Auto-trash applies to `inventory_full` of `mine`, `selection` (clear projects) and `explore` when the last status shows at least two junk stacks (one when there is no storage); it queues `trash` (junk only, `drop`) + the task again instead of `deposit_storage` + the task (event `trash_retry`, same 50-retry limit), otherwise the usual deposit.
+
 ### 5.8 Notifications
 Events go to `events.jsonl`, the panel (SSE) and the tray tooltip/balloon for `warn`/`error` (bot died, crashed, project blocked on manual materials, project done).
 
@@ -358,12 +390,12 @@ POST   /api/bots/start-all | stop-all
 
 GET/POST/PUT/DELETE  /api/scenarios[/{id}]     POST /api/scenarios/{id}/run {botIds, repeat}
 GET/POST/PUT/DELETE  /api/kits[/{id}]
-GET/PUT  /api/world/{serverId}                 waypoints, areas, containers, zones, deaths
+GET/PUT  /api/world/{serverId}                 waypoints, areas, containers, zones, deaths; PUT accepts position references (§5.7e) in waypoints[].pos, areas[].box, zones[].box (400 ref_* when unresolvable) and marks containers whose roles changed as roleSource "manual"
 POST     /api/world/{serverId}/discover        {botId, radius} → containers_nearby via a bot, merged into the index
 GET      /api/schematics                       list with dims + block count
 POST     /api/schematics?name=<file>           raw body upload
 DELETE   /api/schematics/{name}
-GET/POST/PUT/DELETE  /api/projects[/{id}]      POST /api/projects/{id}/start|pause|resume|stop
+GET/POST/PUT/DELETE  /api/projects[/{id}]      POST /api/projects/{id}/start|pause|resume|stop; POST/PUT resolve position references in the config (§5.7e) before validation
 GET      /api/autopilot                        autopilot state: settings, per-server offered work + notes, scans, refills, stuck timers, goals, categories
 GET      /api/orders                           standing orders (config.json orders[]) with live status {state, stock, target, inTransit, rows, actions, manual}
 POST     /api/orders                           create (id from the item when absent, serverId defaults to the only server)

@@ -54,12 +54,15 @@ public final class BotConfigFactory {
         o.add("baritone", baritone);
         o.add("client", cfg.client().deepCopy());
         o.add("status", cfg.status().deepCopy());
+        ManagerConfig.General g = cfg.general();
+        o.add("owner", Json.obj("player", g.ownerPlayer() == null ? "" : g.ownerPlayer(),
+                "prefix", g.commandPrefixOrDefault(), "patterns", Json.arrOf(g.ownerChatPatterns())));
         BotConfig p = BotConfig.parse(o);
         // parse() merges onto BotConfig.defaults(), which would bring back Baritone settings the user deleted.
         Map<String, JsonElement> exact = new LinkedHashMap<>();
         baritone.entrySet().forEach(e -> exact.put(e.getKey(), e.getValue()));
         return new BotConfig(p.botId(), p.username(), p.server(), p.login(), p.companion(), p.behaviour(),
-                p.protection(), exact, p.client(), p.status());
+                p.protection(), exact, p.client(), p.status(), p.owner());
     }
 
     /** BotConfig.Zone has only dim + box; extra keys such as a zone name are dropped. */

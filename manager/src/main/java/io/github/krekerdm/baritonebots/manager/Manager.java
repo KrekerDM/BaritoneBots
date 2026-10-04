@@ -83,6 +83,10 @@ public final class Manager implements LinkServer.Handler {
     public final io.github.krekerdm.baritonebots.manager.goals.GoalRunner goals;
     public final io.github.krekerdm.baritonebots.manager.automation.Automation automation;
     public final io.github.krekerdm.baritonebots.manager.process.MicrosoftLogin msLogin;
+    /** Position references (SPEC §5.7e). */
+    public final io.github.krekerdm.baritonebots.manager.refs.RefResolver refs;
+    /** In-game owner commands (SPEC §5.7e). */
+    public final io.github.krekerdm.baritonebots.manager.refs.OwnerCommands owner;
     public final LinkServer link;
     public final HttpApi http;
     private Tray tray;
@@ -120,6 +124,8 @@ public final class Manager implements LinkServer.Handler {
         goals = new io.github.krekerdm.baritonebots.manager.goals.GoalRunner(this);
         automation = new io.github.krekerdm.baritonebots.manager.automation.Automation(this);
         msLogin = new io.github.krekerdm.baritonebots.manager.process.MicrosoftLogin(this);
+        refs = new io.github.krekerdm.baritonebots.manager.refs.RefResolver(this);
+        owner = new io.github.krekerdm.baritonebots.manager.refs.OwnerCommands(this);
         link = new LinkServer(loop, this);
         http = new HttpApi(this);
     }
@@ -473,6 +479,8 @@ public final class Manager implements LinkServer.Handler {
             dispatcher.onDeath(b, ev);
         } else if (EventKinds.RESPAWNED.equals(ev.kind())) {
             dispatcher.onRespawned(b);
+        } else if (EventKinds.OWNER_COMMAND.equals(ev.kind())) {
+            owner.onCommand(b, ev); // in-game command from the owner (SPEC §5.7e)
         } else {
             autopilot.onBotEvent(b, ev); // tool_low / food_low → refill at the next safe point
         }
@@ -482,7 +490,8 @@ public final class Manager implements LinkServer.Handler {
         if (b.def.serverId() == null || snap.pos() == null) {
             return;
         }
-        worlds.onSnapshot(b.def.serverId(), snap);
+        var stored = worlds.onSnapshot(b.def.serverId(), snap);
+        autopilot.applyLabel(b.def.serverId(), stored); // signs / item frames → roles (SPEC §5.7e)
         broadcastWorld(b.def.serverId());
         automation.onSnapshot(b.def.serverId());
     }

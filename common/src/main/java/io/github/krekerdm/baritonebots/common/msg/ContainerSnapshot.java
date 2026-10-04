@@ -8,12 +8,20 @@ import java.util.Map;
 
 /**
  * Contents of a container block the bot opened (SPEC §2.5); sent when it opens and again when it closes
- * ({@code open=false}). {@code size} counts container slots only, {@code free} the empty ones.
+ * ({@code open=false}). {@code size} counts container slots only, {@code free} the empty ones. {@code signText} =
+ * the lower-cased text of signs on or next to the container (null = none), {@code frameItem} = the item shown in an
+ * item frame on it (null = none) (SPEC §5.7e).
  */
 public record ContainerSnapshot(String dim, Pos pos, String block, int size, int free, List<SlotItem> items,
-                                long time, boolean open) {
+                                long time, boolean open, String signText, String frameItem) {
     public ContainerSnapshot {
         items = Copies.list(items);
+    }
+
+    /** Without sign / item frame information. */
+    public ContainerSnapshot(String dim, Pos pos, String block, int size, int free, List<SlotItem> items, long time,
+                             boolean open) {
+        this(dim, pos, block, size, free, items, time, open, null, null);
     }
 
     /** Item totals by id. */

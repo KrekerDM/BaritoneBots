@@ -5,7 +5,9 @@ import io.github.krekerdm.baritonebots.common.msg.ContainerSnapshot;
 import io.github.krekerdm.baritonebots.mod.BotRuntime;
 import io.github.krekerdm.baritonebots.mod.util.McIds;
 import io.github.krekerdm.baritonebots.mod.util.Positions;
+import io.github.krekerdm.baritonebots.mod.util.Signs;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -130,7 +132,11 @@ public final class ContainerSensor {
             }
         }
         String block = pos != null && bot.level() != null ? McIds.block(bot.level().getBlockState(pos)) : null;
+        Signs.Info label = Signs.Info.NONE;
+        if (pos != null && bot.level() != null) {
+            label = Signs.near(bot.level(), pos, Signs.frames(bot.level(), new AABB(pos).inflate(2)));
+        }
         return new ContainerSnapshot(dim, pos == null ? null : Positions.toPos(pos), block, slots.size(), free, items,
-                System.currentTimeMillis(), open);
+                System.currentTimeMillis(), open, label.signText(), label.frameItem());
     }
 }

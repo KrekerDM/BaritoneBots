@@ -104,6 +104,7 @@ public final class WorldStore {
         WorldDoc.Container updated = c == null
                 ? new WorldDoc.Container(Tokens.id("c"), dim, s.pos(), s.block(), List.of(), "", snap, s.time())
                 : c.withSnapshot(s.block(), snap, s.time());
+        updated = updated.withLabel(s.signText(), s.frameItem()); // a snapshot always reports the current label
         d.replaceContainer(updated);
         markDirty(serverId);
         return updated;
@@ -136,6 +137,7 @@ public final class WorldStore {
     public int mergeDiscovered(String serverId, JsonArray found, RoleChooser chooser) {
         WorldDoc d = get(serverId);
         int added = 0;
+        int labelled = 0;
         for (JsonElement e : found) {
             if (!e.isJsonObject()) {
                 continue;
@@ -147,24 +149,37 @@ public final class WorldStore {
             }
             String dim = Dims.normalize(Json.getString(o, "dim", Dims.OVERWORLD));
             String block = Json.getString(o, "block", "minecraft:chest");
+            String sign = Json.getString(o, "signText", null);
+            String frame = Json.getString(o, "frameItem", null);
             WorldDoc.Container c = d.containerAt(dim, pos);
             if (c == null) {
                 List<String> roles = chooser.roles(dim, pos, block);
                 d.containers.add(new WorldDoc.Container(Tokens.id("c"), dim, pos, block,
-                        roles == null ? List.of() : roles, "", null, 0));
+                        roles == null ? List.of() : roles, "", null, 0, sign, frame, WorldDoc.SOURCE_AUTO));
                 added++;
+            } else if (!java.util.Objects.equals(sign, c.signText()) || !java.util.Objects.equals(frame, c.frameItem())) {
+                d.replaceContainer(c.withLabel(sign, frame)); // the scan sees labels too
+                labelled++;
             }
         }
-        if (added > 0) {
+        if (added > 0 || labelled > 0) {
             markDirty(serverId);
         }
         return added;
     }
 
-    /** Replaces a container's roles (autopilot category adoption). */
+    /** Replaces a container's roles (autopilot category adoption); the recorded role source is kept. */
     public void setRoles(String serverId, WorldDoc.Container c, List<String> roles) {
         get(serverId).replaceContainer(c.withRoles(roles));
         markDirty(serverId);
+    }
+
+    /** Replaces a container's roles and records who set them ({@link WorldDoc#SOURCE_SIGN}, ...). */
+    public WorldDoc.Container setRoles(String serverId, WorldDoc.Container c, List<String> roles, String source) {
+        WorldDoc.Container updated = c.withRoles(roles, source);
+        get(serverId).replaceContainer(updated);
+        markDirty(serverId);
+        return updated;
     }
 
     /** Furnaces and crafting tables get their obvious role; chests and barrels stay unassigned. */

@@ -1,8 +1,9 @@
 {
   "tasks": [
     {"type": "goto", "continuous": false, "heavy": false, "supported": true, "args": [
-      {"name": "x", "type": "int", "required": true},
-      {"name": "z", "type": "int", "required": true},
+      {"name": "pos", "type": "pos", "required": false, "refs": true},
+      {"name": "x", "type": "int", "required": false},
+      {"name": "z", "type": "int", "required": false},
       {"name": "y", "type": "int", "required": false},
       {"name": "range", "type": "int", "required": false, "default": 2, "min": 0, "max": 64, "unit": "blocks"}
     ]},
@@ -31,22 +32,22 @@
       {"name": "fakeOres", "type": "bool", "required": false, "default": false}
     ]},
     {"type": "farm", "continuous": false, "heavy": true, "supported": true, "args": [
-      {"name": "center", "type": "pos", "required": true},
+      {"name": "center", "type": "pos", "required": true, "refs": true},
       {"name": "range", "type": "int", "required": false, "default": 20, "min": 1, "max": 128, "unit": "blocks"},
       {"name": "durationSec", "type": "int", "required": false, "default": 0, "min": 0, "max": 86400, "unit": "s"}
     ]},
     {"type": "selection", "continuous": false, "heavy": true, "supported": true, "args": [
       {"name": "op", "type": "enum", "required": true, "default": "clear", "enum": ["clear", "fill", "walls", "shell", "replace"]},
-      {"name": "box", "type": "box", "required": true},
+      {"name": "box", "type": "box", "required": true, "refs": true},
       {"name": "block", "type": "item", "required": false},
       {"name": "from", "type": "ids", "required": false}
     ]},
     {"type": "build", "continuous": false, "heavy": true, "supported": true, "args": [
       {"name": "file", "type": "string", "required": true},
-      {"name": "origin", "type": "pos", "required": true},
+      {"name": "origin", "type": "pos", "required": true, "refs": true},
       {"name": "rotation", "type": "enum", "required": false, "default": "0", "enum": ["0", "90", "180", "270"]},
       {"name": "mirror", "type": "enum", "required": false, "default": "none", "enum": ["none", "front_back", "left_right"]},
-      {"name": "box", "type": "box", "required": false},
+      {"name": "box", "type": "box", "required": false, "refs": true},
       {"name": "name", "type": "string", "required": false},
       {"name": "buildInLayers", "type": "bool", "required": false},
       {"name": "layerOrder", "type": "bool", "required": false}
@@ -56,22 +57,22 @@
       {"name": "items", "type": "items", "required": false}
     ]},
     {"type": "take", "continuous": false, "heavy": false, "supported": true, "args": [
-      {"name": "container", "type": "container", "required": true},
+      {"name": "container", "type": "container", "required": true, "refs": true},
       {"name": "items", "type": "item_counts", "required": true}
     ]},
     {"type": "deposit", "continuous": false, "heavy": false, "supported": true, "args": [
-      {"name": "containers", "type": "containers", "required": true},
+      {"name": "containers", "type": "containers", "required": true, "refs": true},
       {"name": "keep", "type": "items", "required": false},
       {"name": "keepCounts", "type": "item_counts", "required": false},
       {"name": "only", "type": "items", "required": false}
     ]},
     {"type": "transfer", "continuous": false, "heavy": false, "supported": true, "args": [
-      {"name": "from", "type": "container", "required": true},
-      {"name": "to", "type": "containers", "required": true},
+      {"name": "from", "type": "container", "required": true, "refs": true},
+      {"name": "to", "type": "containers", "required": true, "refs": true},
       {"name": "items", "type": "item_counts", "required": true}
     ]},
     {"type": "inspect", "continuous": false, "heavy": false, "supported": true, "args": [
-      {"name": "containers", "type": "containers", "required": true}
+      {"name": "containers", "type": "containers", "required": true, "refs": true}
     ]},
     {"type": "equip", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "armor", "type": "bool", "required": false, "default": true},
@@ -83,36 +84,36 @@
     {"type": "craft", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "item", "type": "item", "required": true},
       {"name": "count", "type": "int", "required": false, "default": 1, "min": 1, "max": 2304, "unit": "items"},
-      {"name": "table", "type": "container", "required": false},
+      {"name": "table", "type": "container", "required": false, "refs": true},
       {"name": "grid", "type": "text", "required": false}
     ]},
     {"type": "smelt_load", "continuous": false, "heavy": false, "supported": true, "args": [
-      {"name": "furnace", "type": "container", "required": true},
+      {"name": "furnace", "type": "container", "required": true, "refs": true},
       {"name": "input", "type": "item", "required": true},
       {"name": "count", "type": "int", "required": true, "min": 1, "max": 64, "unit": "items"},
       {"name": "fuel", "type": "item", "required": true},
       {"name": "fuelCount", "type": "int", "required": true, "min": 0, "max": 64, "unit": "items"}
     ]},
     {"type": "smelt_collect", "continuous": false, "heavy": false, "supported": true, "args": [
-      {"name": "furnace", "type": "container", "required": true},
+      {"name": "furnace", "type": "container", "required": true, "refs": true},
       {"name": "all", "type": "bool", "required": false, "default": false}
     ]},
     {"type": "breed", "continuous": false, "heavy": false, "supported": true, "args": [
-      {"name": "box", "type": "box", "required": true},
+      {"name": "box", "type": "box", "required": true, "refs": true},
       {"name": "animal", "type": "string", "required": true},
       {"name": "food", "type": "item", "required": false},
       {"name": "max", "type": "int", "required": false, "default": 20, "min": 2, "max": 500, "unit": "animals"}
     ]},
     {"type": "slaughter", "continuous": false, "heavy": false, "supported": true, "args": [
-      {"name": "box", "type": "box", "required": true},
+      {"name": "box", "type": "box", "required": true, "refs": true},
       {"name": "animal", "type": "string", "required": true},
       {"name": "keep", "type": "int", "required": false, "default": 4, "min": 0, "max": 500, "unit": "animals"}
     ]},
     {"type": "shear", "continuous": false, "heavy": false, "supported": true, "args": [
-      {"name": "box", "type": "box", "required": true}
+      {"name": "box", "type": "box", "required": true, "refs": true}
     ]},
     {"type": "guard", "continuous": true, "heavy": false, "supported": true, "args": [
-      {"name": "center", "type": "pos", "required": true},
+      {"name": "center", "type": "pos", "required": true, "refs": true},
       {"name": "radius", "type": "int", "required": false, "default": 12, "min": 1, "max": 64, "unit": "blocks"}
     ]},
     {"type": "attack", "continuous": false, "heavy": false, "supported": true, "args": [
@@ -120,7 +121,7 @@
       {"name": "types", "type": "ids", "required": false}
     ]},
     {"type": "recover", "continuous": false, "heavy": false, "supported": true, "args": [
-      {"name": "pos", "type": "pos", "required": true},
+      {"name": "pos", "type": "pos", "required": true, "refs": true},
       {"name": "dim", "type": "enum", "required": true, "default": "minecraft:overworld", "enum": ["minecraft:overworld", "minecraft:the_nether", "minecraft:the_end"]},
       {"name": "radius", "type": "int", "required": false, "default": 6, "min": 1, "max": 32, "unit": "blocks"}
     ]},
@@ -151,44 +152,49 @@
       {"name": "count", "type": "int", "required": false, "default": 1, "min": 1, "max": 2304, "unit": "items"}]},
     {"step": "progress", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "tier", "type": "enum", "enum": ["wood", "stone", "iron", "diamond"], "required": true, "default": "iron"}]},
-    {"step": "supply", "continuous": false, "heavy": false, "supported": true, "internal": true, "args": []}
+    {"step": "supply", "continuous": false, "heavy": false, "supported": true, "internal": true, "args": []},
+    {"step": "trash", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "profile", "type": "string", "required": false, "default": "снаряжение"},
+      {"name": "to", "type": "enum", "enum": ["drop", "store", "trash_chest"], "required": false, "default": "drop"}]},
+    {"step": "resolve", "continuous": false, "heavy": false, "supported": true, "internal": true, "args": []}
   ],
+  "refs": {"pos": ["home", "waypoint", "owner", "owner_look", "bot", "auto"], "box": ["area", "auto", "two"]},
   "roles": ["builder", "miner", "lumberjack", "farmer", "smelter", "crafter", "sorter", "rancher", "hauler", "guard"],
   "projectKinds": [
     {"kind": "build", "supported": true, "args": [
-      {"name": "origin", "type": "pos", "required": true},
+      {"name": "origin", "type": "pos", "required": true, "refs": true},
       {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
       {"name": "rotation", "type": "enum", "enum": [0, 90, 180, 270], "required": true, "default": 0},
       {"name": "mirror", "type": "enum", "enum": ["none", "front_back", "left_right"], "required": true, "default": "none"},
-      {"name": "supply", "type": "containers", "required": false}
+      {"name": "supply", "type": "containers", "required": false, "refs": true}
     ]},
     {"kind": "gather", "supported": true, "args": [
       {"name": "quotas", "type": "item_counts", "required": true},
       {"name": "into", "type": "string", "required": false, "default": "storage"},
-      {"name": "storage", "type": "containers", "required": false},
+      {"name": "storage", "type": "containers", "required": false, "refs": true},
       {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
       {"name": "repeat", "type": "bool", "required": false, "default": false}
     ]},
     {"kind": "clear", "supported": true, "args": [
-      {"name": "box", "type": "box", "required": false},
+      {"name": "box", "type": "box", "required": false, "refs": true},
       {"name": "area", "type": "string", "required": false},
       {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
-      {"name": "deposit", "type": "containers", "required": false},
+      {"name": "deposit", "type": "containers", "required": false, "refs": true},
       {"name": "verify", "type": "bool", "required": false, "default": true}
     ]},
     {"kind": "farm", "supported": true, "args": [
-      {"name": "box", "type": "box", "required": false},
+      {"name": "box", "type": "box", "required": false, "refs": true},
       {"name": "area", "type": "string", "required": false},
-      {"name": "center", "type": "pos", "required": false},
+      {"name": "center", "type": "pos", "required": false, "refs": true},
       {"name": "range", "type": "int", "required": false, "min": 1, "max": 128, "unit": "blocks"},
       {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
       {"name": "durationSec", "type": "int", "required": false, "default": 600, "min": 30, "max": 86400, "unit": "s"},
       {"name": "farmers", "type": "int", "required": false, "default": 1, "min": 1, "max": 16},
       {"name": "cycles", "type": "int", "required": false, "default": 0, "min": 0, "max": 100000},
-      {"name": "deposit", "type": "containers", "required": false}
+      {"name": "deposit", "type": "containers", "required": false, "refs": true}
     ]},
     {"kind": "ranch", "supported": true, "args": [
-      {"name": "box", "type": "box", "required": false},
+      {"name": "box", "type": "box", "required": false, "refs": true},
       {"name": "area", "type": "string", "required": false},
       {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
       {"name": "animal", "type": "string", "required": true, "default": "minecraft:cow"},
@@ -197,18 +203,18 @@
       {"name": "keep", "type": "int", "required": false, "default": 4, "min": 0, "max": 500, "unit": "animals"},
       {"name": "shear", "type": "bool", "required": false, "default": false},
       {"name": "intervalSec", "type": "int", "required": false, "default": 300, "min": 30, "max": 86400, "unit": "s"},
-      {"name": "deposit", "type": "containers", "required": false}
+      {"name": "deposit", "type": "containers", "required": false, "refs": true}
     ]},
     {"kind": "sort", "supported": true, "args": [
-      {"name": "inbox", "type": "containers", "required": false},
+      {"name": "inbox", "type": "containers", "required": false, "refs": true},
       {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
       {"name": "continuous", "type": "bool", "required": false, "default": false}
     ]},
     {"kind": "smelt", "supported": true, "args": [
       {"name": "inputs", "type": "items", "required": true, "default": ["minecraft:raw_iron", "minecraft:raw_gold", "minecraft:raw_copper"]},
       {"name": "fuel", "type": "items", "required": false},
-      {"name": "furnaces", "type": "containers", "required": false},
-      {"name": "output", "type": "containers", "required": false},
+      {"name": "furnaces", "type": "containers", "required": false, "refs": true},
+      {"name": "output", "type": "containers", "required": false, "refs": true},
       {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
       {"name": "continuous", "type": "bool", "required": false, "default": false}
     ]}

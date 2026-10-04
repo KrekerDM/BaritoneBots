@@ -26,6 +26,7 @@ import io.github.krekerdm.baritonebots.mod.behaviour.EatBehaviour;
 import io.github.krekerdm.baritonebots.mod.behaviour.Eater;
 import io.github.krekerdm.baritonebots.mod.behaviour.LifeBehaviour;
 import io.github.krekerdm.baritonebots.mod.behaviour.LoginBehaviour;
+import io.github.krekerdm.baritonebots.mod.behaviour.OwnerWatcher;
 import io.github.krekerdm.baritonebots.mod.behaviour.StatusReporter;
 import io.github.krekerdm.baritonebots.mod.link.CompanionBridge;
 import io.github.krekerdm.baritonebots.mod.link.LinkClient;
@@ -42,6 +43,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.chat.ChatType;
 import net.minecraft.world.level.block.Block;
 
 import java.util.List;
@@ -74,6 +76,7 @@ public final class BotRuntime {
     public final TaskManager tasks;
     public final QueryHandler queries;
     public final CompanionBridge companion;
+    public final OwnerWatcher owner;
 
     private final BaritoneSettingsApplier settingsApplier = new BaritoneSettingsApplier();
     private final RateLimiter warnLimiter = new RateLimiter(5, 1000);
@@ -103,6 +106,7 @@ public final class BotRuntime {
         this.tasks = new TaskManager(this);
         this.queries = new QueryHandler(this);
         this.companion = new CompanionBridge(this);
+        this.owner = new OwnerWatcher(this);
     }
 
     /** Creates the runtime, registers Fabric events and starts the link. */
@@ -114,8 +118,22 @@ public final class BotRuntime {
         instance = rt;
         rt.companion.register();
         ClientTickEvents.END_CLIENT_TICK.register(rt::onEndTick);
-        ClientReceiveMessageEvents.GAME.register((message, overlay) -> rt.login.onSystemMessage(message.getString(),
-                overlay));
+        ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
+            String text = message.getString();
+            if (!rt.owner.onSystemMessage(text, overlay)) {
+                rt.login.onSystemMessage(text, overlay);
+            }
+        });
+        // Player chat (signed or not) names its sender; only owner commands are of interest here.
+        ClientReceiveMessageEvents.CHAT.register((message, signed, sender, params, time) -> {
+            boolean whisper = params != null && params.chatType().is(ChatType.MSG_COMMAND_INCOMING);
+            if (sender != null) {
+                rt.owner.onPlayerChat(sender.name(), signed != null ? signed.signedContent() : message.getString(),
+                        whisper);
+            } else {
+                rt.owner.onSystemMessage(message.getString(), false);
+            }
+        });
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             rt.connection.onJoin();
             rt.companion.onJoin();
@@ -320,6 +338,7 @@ public final class BotRuntime {
         login.onConfig(cfg);
         connection.onConfig(cfg);
         companion.onConfig(cfg);
+        owner.onConfig(cfg);
         status.markDirty();
     }
 

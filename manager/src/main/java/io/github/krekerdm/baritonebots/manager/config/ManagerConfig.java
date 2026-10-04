@@ -15,7 +15,7 @@ import java.util.Optional;
 public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProfile> servers, List<BotDef> bots,
                             JsonObject behaviour, JsonObject baritone, JsonObject client, JsonObject status,
                             PlannerCfg planner, AutopilotCfg autopilot, List<OrderDef> orders,
-                            List<ScheduleDef> schedules, List<RuleDef> rules) {
+                            List<ScheduleDef> schedules, List<RuleDef> rules, JsonObject keepProfiles) {
 
     public ManagerConfig {
         servers = servers == null ? List.of() : List.copyOf(servers);
@@ -28,6 +28,28 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
         baritone = orEmpty(baritone);
         client = orEmpty(client);
         status = orEmpty(status);
+        keepProfiles = orEmpty(keepProfiles);
+    }
+
+    /**
+     * A keep profile by name (case-insensitive); null / blank = the default «снаряжение», else the first one.
+     * Null when there is no profile at all or the name is unknown.
+     */
+    public JsonObject keepProfile(String name) {
+        String want = name == null || name.isBlank() ? SettingsSchema.DEFAULT_KEEP_PROFILE : name.trim();
+        for (var e : keepProfiles.entrySet()) {
+            if (e.getKey().equalsIgnoreCase(want) && e.getValue().isJsonObject()) {
+                return e.getValue().getAsJsonObject();
+            }
+        }
+        if (name == null || name.isBlank()) {
+            for (var e : keepProfiles.entrySet()) {
+                if (e.getValue().isJsonObject()) {
+                    return e.getValue().getAsJsonObject();
+                }
+            }
+        }
+        return null;
     }
 
     static JsonObject orEmpty(JsonObject o) {
@@ -46,8 +68,29 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
         return bots.stream().filter(b -> b.id().equalsIgnoreCase(id)).findFirst();
     }
 
-    public record General(String language, String ownerPlayer, Panel panel, LinkCfg link, boolean tray,
-                          boolean autoStartBots, int eventLogLimit) {
+    /**
+     * {@code ownerPlayer} + {@code commandPrefix} + {@code ownerChatPatterns} go to the bots as {@code BotConfig.owner};
+     * {@code ownerReplyCommand} is the whisper template for replies ({@code {player}}, {@code {text}}).
+     */
+    public record General(String language, String ownerPlayer, String commandPrefix, List<String> ownerChatPatterns,
+                          String ownerReplyCommand, Panel panel, LinkCfg link, boolean tray, boolean autoStartBots,
+                          int eventLogLimit) {
+        public General {
+            ownerChatPatterns = ownerChatPatterns == null ? List.of() : List.copyOf(ownerChatPatterns);
+        }
+
+        public String commandPrefixOrDefault() {
+            return commandPrefix == null || commandPrefix.isBlank() ? "!b" : commandPrefix.trim();
+        }
+
+        public String replyCommandOrDefault() {
+            return ownerReplyCommand == null || ownerReplyCommand.isBlank() ? "/msg {player} {text}" : ownerReplyCommand;
+        }
+
+        /** The owner's name, or null when none is configured. */
+        public String ownerOrNull() {
+            return ownerPlayer == null || ownerPlayer.isBlank() ? null : ownerPlayer.trim();
+        }
     }
 
     public record Panel(String bind, int port, boolean openBrowser) {
@@ -166,7 +209,7 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
                                int discoveryIntervalSec, int inspectMaxAgeMin, int maxInspectPerTick, int homeRadius,
                                boolean useFound, int foodMin, int blocksMin, double toolMinDurability, int stuckSec,
                                int idleHomeSec, List<String> throwaway, List<String> smeltInputs,
-                               List<Category> categories) {
+                               List<Category> categories, java.util.Map<String, String> signWords, AutoTrash autoTrash) {
         /** Keys a bot may override in {@code bots[].autopilot}. */
         public static final List<String> BOT_KEYS = List.of("supply", "sort", "idleWork", "discovery", "foodMin",
                 "blocksMin", "toolMinDurability", "stuckSec");
@@ -176,6 +219,9 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
             throwaway = throwaway == null ? List.of() : List.copyOf(throwaway);
             smeltInputs = smeltInputs == null ? List.of() : List.copyOf(smeltInputs);
             categories = categories == null ? List.of() : List.copyOf(categories);
+            signWords = signWords == null ? java.util.Map.of() : java.util.Collections.unmodifiableMap(
+                    new java.util.LinkedHashMap<>(signWords));
+            autoTrash = autoTrash == null ? new AutoTrash(false, List.of(), java.util.Map.of()) : autoTrash;
         }
 
         /** The schema defaults. */
@@ -197,7 +243,20 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
                     discoveryIntervalSec, inspectMaxAgeMin, maxInspectPerTick, homeRadius, useFound,
                     Math.max(0, Json.getInt(o, "foodMin", foodMin)), Math.max(0, Json.getInt(o, "blocksMin", blocksMin)),
                     Math.max(0, Math.min(1, Json.getDouble(o, "toolMinDurability", toolMinDurability))),
-                    Math.max(0, Json.getInt(o, "stuckSec", stuckSec)), idleHomeSec, throwaway, smeltInputs, categories);
+                    Math.max(0, Json.getInt(o, "stuckSec", stuckSec)), idleHomeSec, throwaway, smeltInputs, categories,
+                    signWords, autoTrash);
+        }
+    }
+
+    /**
+     * {@code autopilot.autoTrash} (SPEC §5.7f): when the inventory fills up during mining / clearing, items matching
+     * {@code junk} are thrown on the spot, except {@code keepCounts} of them ({@code glob → count}).
+     */
+    public record AutoTrash(boolean enabled, List<String> junk, java.util.Map<String, Integer> keepCounts) {
+        public AutoTrash {
+            junk = junk == null ? List.of() : List.copyOf(junk);
+            keepCounts = keepCounts == null ? java.util.Map.of() : java.util.Collections.unmodifiableMap(
+                    new java.util.LinkedHashMap<>(keepCounts));
         }
     }
 

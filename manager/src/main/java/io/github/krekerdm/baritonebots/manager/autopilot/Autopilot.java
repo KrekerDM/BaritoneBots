@@ -51,6 +51,7 @@ public final class Autopilot {
     private final Manager m;
     private final Planner planner;
     private final Supply supply;
+    private final Trash trash;
     private final ProductionWork production;
     private final StuckDetector stuck = new StuckDetector();
     private final Map<String, AutopilotSource> sources = new LinkedHashMap<>();
@@ -68,11 +69,60 @@ public final class Autopilot {
         this.m = m;
         this.planner = planner;
         this.supply = new Supply(m, this);
+        this.trash = new Trash(m, this);
         this.production = new ProductionWork(m, planner);
     }
 
     public Supply supply() {
         return supply;
+    }
+
+    /** The {@code trash} step and auto-trash (SPEC §5.7f). */
+    public Trash trash() {
+        return trash;
+    }
+
+    // ------------------------------------------------------------------ container labels (SPEC §5.7e)
+
+    /**
+     * Roles from a container's sign / item frame: manual roles always win, a label beats automatic roles. A container
+     * whose label disappeared goes back to its automatic default roles.
+     */
+    public void applyLabel(String serverId, WorldDoc.Container c) {
+        if (c == null || serverId == null || c.manual()) {
+            return;
+        }
+        List<String> want = SignRoles.roles(c.signText(), c.frameItem(), m.config.get().autopilot().signWords(),
+                item -> categories().of(item));
+        if (!want.isEmpty()) {
+            if (c.fromSign() && want.equals(c.roles())) {
+                return;
+            }
+            m.worlds.setRoles(serverId, c, want, WorldDoc.SOURCE_SIGN);
+            m.event("container_sign", Levels.INFO, null, "event.autopilot.sign", Map.of("x", c.pos().x(),
+                    "y", c.pos().y(), "z", c.pos().z(), "roles", String.join(", ", want),
+                    "label", c.signText() != null ? c.signText() : String.valueOf(c.frameItem())));
+            m.broadcastWorld(serverId);
+        } else if (c.fromSign()) {
+            List<String> auto = roleChooser(serverId).roles(c.dim(), c.pos(), c.block());
+            m.worlds.setRoles(serverId, c, auto == null ? List.of() : auto, WorldDoc.SOURCE_AUTO);
+            m.broadcastWorld(serverId);
+        }
+    }
+
+    /** {@link #applyLabel} for every container of a {@code containers_nearby} answer. */
+    public void applyLabels(String serverId, JsonArray found) {
+        WorldDoc doc = m.worlds.get(serverId);
+        for (var e : found) {
+            if (!e.isJsonObject()) {
+                continue;
+            }
+            Pos pos = Pos.fromJson(e.getAsJsonObject().get("pos"));
+            if (pos != null) {
+                applyLabel(serverId, doc.containerAt(Dims.normalize(Json.getString(e.getAsJsonObject(), "dim",
+                        Dims.OVERWORLD)), pos));
+            }
+        }
     }
 
     ProductionWork production() {
@@ -258,6 +308,7 @@ public final class Autopilot {
                 return;
             }
             int added = m.worlds.mergeDiscovered(sid, found, roleChooser(sid));
+            applyLabels(sid, found);
             if (added > 0) {
                 m.event("containers_found", Levels.INFO, b.id, "event.autopilot.discovered",
                         Map.of("bot", b.id, "count", added, "radius", radius));
@@ -304,7 +355,9 @@ public final class Autopilot {
                 m.worlds.setRoles(serverId, c, chooser.roles(c.dim(), c.pos(), c.block()));
             }
         }
-        return m.worlds.mergeDiscovered(serverId, found, chooser);
+        int added = m.worlds.mergeDiscovered(serverId, found, chooser);
+        applyLabels(serverId, found);
+        return added;
     }
 
     /**

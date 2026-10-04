@@ -178,6 +178,11 @@ public final class ProjectService {
         return out;
     }
 
+    /** Every project (read-only use: placement exclusions, owner commands). */
+    public List<Project> all() {
+        return List.copyOf(projects.values());
+    }
+
     public Project require(String id) {
         Project p = projects.get(id);
         if (p == null) {

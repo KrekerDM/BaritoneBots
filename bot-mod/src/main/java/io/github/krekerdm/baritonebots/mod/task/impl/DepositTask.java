@@ -27,7 +27,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * {@code deposit containers [keep] [keepCounts] [only]}: visits the containers in order and moves every inventory
+ * {@code deposit containers [keep] [keepCounts] [only] [slots]} ({@code slots:[{slot,item,count?}]} = exactly these
+ * inventory stacks, the filters are then ignored): visits the containers in order and moves every inventory
  * stack that matches {@code only} (when given) and not {@code keep} into them; {@code keepCounts} keeps that many
  * of the matching items (taken from the hotbar first). A full container moves on to the next one. ok with
  * {@code {moved, left}}; {@code container_failed} only when no container could be opened at all.
@@ -40,6 +41,8 @@ public final class DepositTask implements TaskExecutor {
     private List<String> keep;
     private List<String> only;
     private Map<String, Integer> keepCounts;
+    private Map<Integer, TaskArgs.SlotPick> picks = Map.of();
+    private final Map<Integer, Integer> pickStart = new java.util.HashMap<>();
     private Map<String, Integer> before;
     private final List<BlockPos> failed = new ArrayList<>();
     private final Set<Integer> stuck = new HashSet<>();
@@ -58,6 +61,12 @@ public final class DepositTask implements TaskExecutor {
         keep = TaskArgs.globs(ctx.args(), "keep");
         only = TaskArgs.globs(ctx.args(), "only");
         keepCounts = TaskArgs.globCounts(ctx.args(), "keepCounts");
+        picks = TaskArgs.slotPicks(ctx.args(), "slots");
+        for (TaskArgs.SlotPick pk : picks.values()) {
+            if (pk.slot() < Inv.MAIN_SIZE) {
+                pickStart.put(pk.slot(), ctx.player().getInventory().getItem(pk.slot()).getCount());
+            }
+        }
         before = Inv.totals(ctx.player(), false);
         if (moves(inventorySlots(ctx.player())).isEmpty()) {
             ctx.succeed("nothing to deposit", data(ctx));
@@ -130,8 +139,29 @@ public final class DepositTask implements TaskExecutor {
         }
     }
 
+    /** The {@code slots} picks still to move (count left per stack); a stack whose item changed is left alone. */
+    private List<Move> pickMoves(List<Slot> playerSlots) {
+        List<Move> out = new ArrayList<>();
+        for (Slot s : playerSlots) {
+            TaskArgs.SlotPick pk = picks.get(s.getContainerSlot());
+            ItemStack st = s.getItem();
+            if (pk == null || st.isEmpty() || !pk.item().equals(McIds.item(st))) {
+                continue;
+            }
+            int moved = Math.max(0, pickStart.getOrDefault(pk.slot(), st.getCount()) - st.getCount());
+            int left = pk.whole() ? st.getCount() : Math.min(st.getCount(), pk.count() - moved);
+            if (left > 0) {
+                out.add(new Move(s, left));
+            }
+        }
+        return out;
+    }
+
     /** Stacks to deposit (with how many from each), honouring only/keep/keepCounts; hotbar slots first. */
     private List<Move> moves(List<Slot> playerSlots) {
+        if (!picks.isEmpty()) {
+            return pickMoves(playerSlots);
+        }
         List<Slot> ordered = new ArrayList<>();
         for (Slot s : playerSlots) {
             if (s.getContainerSlot() < Inv.HOTBAR_SIZE) {

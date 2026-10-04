@@ -22,7 +22,11 @@ import io.github.krekerdm.baritonebots.mod.util.Inv;
 import io.github.krekerdm.baritonebots.mod.util.McIds;
 import io.github.krekerdm.baritonebots.mod.util.Positions;
 import io.github.krekerdm.baritonebots.mod.util.Recipes;
+import io.github.krekerdm.baritonebots.mod.util.Signs;
 import io.github.krekerdm.baritonebots.common.geom.Pos;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.world.level.levelgen.Heightmap;
+import java.util.Map;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
@@ -46,9 +50,9 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Answers {@code query} messages (SPEC §2.4) on the client thread: inventory, entities, player, block_at,
- * containers_nearby, recipe_book right away; {@code bom}/{@code progress} through a queue — the schematic is parsed
- * on a loader thread, then scanned chunk column by chunk column within {@value #SCAN_BUDGET_MS} ms per tick, and the
- * answer is sent when the scan is done.
+ * containers_nearby, recipe_book, owner, heightmap right away; {@code bom}/{@code progress}/{@code scan_blocks}
+ * through a queue — a schematic is parsed on a loader thread, then scanned chunk column by chunk column (block scans:
+ * section by section) within {@value #SCAN_BUDGET_MS} ms per tick, and the answer is sent when the scan is done.
  */
 public final class QueryHandler {
     private static final long SCAN_BUDGET_MS = 15;
@@ -62,10 +66,20 @@ public final class QueryHandler {
             "minecraft:smoker", "minecraft:crafting_table", "minecraft:hopper", "minecraft:dispenser",
             "minecraft:dropper");
 
+    private static final long BLOCK_SCAN_TIMEOUT_MS = 60_000;
+    private static final int MAX_HEIGHTMAP_RADIUS = 96;
+
     private final BotRuntime bot;
-    private final ArrayDeque<SchematicJob> schematicJobs = new ArrayDeque<>();
+    private final ArrayDeque<Job> schematicJobs = new ArrayDeque<>();
     private long budgetTick = -1;
     private long budgetEnd;
+
+    /** A slow query answered across ticks: result when finished, else null. */
+    private interface Job {
+        String id();
+
+        QueryResult advance(long deadline);
+    }
 
     public QueryHandler(BotRuntime bot) {
         this.bot = bot;
@@ -79,10 +93,13 @@ public final class QueryHandler {
         QueryResult result;
         try {
             Query q = e.payload(Query.class);
+            JsonObject args = q.args() == null ? new JsonObject() : q.args();
             if (QueryKinds.BOM.equals(q.kind()) || QueryKinds.PROGRESS.equals(q.kind())) {
-                result = enqueue(e.id(), q.kind(), q.args() == null ? new JsonObject() : q.args());
+                result = enqueue(e.id(), q.kind(), args);
+            } else if (QueryKinds.SCAN_BLOCKS.equals(q.kind())) {
+                result = enqueueScan(e.id(), args);
             } else {
-                result = answer(q.kind(), q.args());
+                result = answer(q.kind(), args);
             }
         } catch (RuntimeException ex) {
             ModInfo.LOG.error("Query failed", ex);
@@ -121,7 +138,26 @@ public final class QueryHandler {
         return null;
     }
 
-    /** Runs schematic jobs in order until the tick budget is used up. */
+    /** Queues a {@code scan_blocks} query (same queue and budget as bom / progress). */
+    private QueryResult enqueueScan(String id, JsonObject args) {
+        if (!bot.inGame()) {
+            return QueryResult.failure("not_in_game");
+        }
+        if (schematicJobs.size() >= MAX_SCHEMATIC_JOBS) {
+            return QueryResult.failure("busy: " + schematicJobs.size() + " slow queries queued");
+        }
+        BlockScan scan;
+        try {
+            scan = BlockScan.create(bot.level(), args, bot.player().blockPosition());
+        } catch (IllegalArgumentException ex) {
+            return QueryResult.failure("bad_args: " + ex.getMessage());
+        }
+        schematicJobs.add(new ScanJob(id, scan));
+        pump();
+        return null;
+    }
+
+    /** Runs queued slow jobs in order until the tick budget is used up. */
     private void pump() {
         if (bot.ticks() != budgetTick) {
             budgetTick = bot.ticks(); // one budget per client tick, shared by every pump in it
@@ -129,27 +165,55 @@ public final class QueryHandler {
         }
         long deadline = budgetEnd;
         while (!schematicJobs.isEmpty()) {
-            SchematicJob job = schematicJobs.peek();
+            Job job = schematicJobs.peek();
             QueryResult r;
             try {
                 r = job.advance(deadline);
             } catch (RuntimeException ex) {
-                ModInfo.LOG.error("Schematic query failed", ex);
+                ModInfo.LOG.error("Slow query failed", ex);
                 r = QueryResult.failure("error: " + ex);
             }
             if (r == null) {
                 return; // waiting for the loader or out of time
             }
             schematicJobs.poll();
-            reply(job.id, r);
+            reply(job.id(), r);
             if (System.nanoTime() >= deadline) {
                 return;
             }
         }
     }
 
+    /** One {@code scan_blocks} query: chunk sections across ticks, then the clusters. */
+    private final class ScanJob implements Job {
+        private final String id;
+        private final BlockScan scan;
+        private final long startedMs = System.currentTimeMillis();
+
+        ScanJob(String id, BlockScan scan) {
+            this.id = id;
+            this.scan = scan;
+        }
+
+        @Override
+        public String id() {
+            return id;
+        }
+
+        @Override
+        public QueryResult advance(long deadline) {
+            if (System.currentTimeMillis() - startedMs > BLOCK_SCAN_TIMEOUT_MS) {
+                return QueryResult.failure("timeout");
+            }
+            if (scan.level() != bot.level()) {
+                return QueryResult.failure("not_in_game");
+            }
+            return scan.step(deadline) ? QueryResult.success(scan.result()) : null;
+        }
+    }
+
     /** One {@code bom}/{@code progress} query: wait for the schematic, then scan chunk columns across ticks. */
-    private final class SchematicJob {
+    private final class SchematicJob implements Job {
         private final String id;
         private final String kind;
         private final SchematicArgs args;
@@ -164,8 +228,14 @@ public final class QueryHandler {
             this.load = load;
         }
 
+        @Override
+        public String id() {
+            return id;
+        }
+
         /** Result when finished, else null. */
-        QueryResult advance(long deadline) {
+        @Override
+        public QueryResult advance(long deadline) {
             if (System.currentTimeMillis() - startedMs > SCHEMATIC_TIMEOUT_MS) {
                 return QueryResult.failure("timeout");
             }
@@ -211,7 +281,7 @@ public final class QueryHandler {
         }
         boolean needsGame = switch (kind) {
             case QueryKinds.INVENTORY, QueryKinds.ENTITIES, QueryKinds.PLAYER, QueryKinds.BLOCK_AT,
-                 QueryKinds.CONTAINERS_NEARBY, QueryKinds.RECIPE_BOOK -> true;
+                 QueryKinds.CONTAINERS_NEARBY, QueryKinds.RECIPE_BOOK, QueryKinds.OWNER, QueryKinds.HEIGHTMAP -> true;
             default -> false;
         };
         if (!needsGame) {
@@ -227,8 +297,62 @@ public final class QueryHandler {
             case QueryKinds.BLOCK_AT -> blockAt(args);
             case QueryKinds.CONTAINERS_NEARBY -> QueryResult.success(containersNearby(args));
             case QueryKinds.RECIPE_BOOK -> recipeBook(args);
+            case QueryKinds.OWNER -> QueryResult.success(bot.owner.info(Json.getString(args, "name", bot.owner.ownerName())));
+            case QueryKinds.HEIGHTMAP -> QueryResult.success(heightmap(args));
             default -> QueryResult.failure("unsupported");
         };
+    }
+
+    /**
+     * {@code heightmap {center?, radius ≤ 96}}: per column (row-major, z outer, x inner) the y of the top non-air
+     * block from the client's WORLD_SURFACE heightmap, below replaceable plants / snow layers ({@code null} = chunk
+     * not loaded), and {@code surface}, one
+     * character per column: {@code .} solid ground, {@code w} liquid, {@code t} tree (leaves / logs), {@code ?}
+     * not loaded.
+     */
+    private JsonObject heightmap(JsonObject args) {
+        ClientLevel level = bot.level();
+        Pos c = Pos.fromJson(args.get("center"));
+        BlockPos center = c == null ? bot.player().blockPosition() : Positions.toBlockPos(c);
+        int r = Math.max(1, Math.min(MAX_HEIGHTMAP_RADIUS, Json.getInt(args, "radius", 32)));
+        int size = 2 * r + 1;
+        int x0 = center.getX() - r;
+        int z0 = center.getZ() - r;
+        JsonArray heights = new JsonArray();
+        StringBuilder surface = new StringBuilder(size * size);
+        BlockPos.MutableBlockPos mp = new BlockPos.MutableBlockPos();
+        long chunkKey = Long.MIN_VALUE;
+        LevelChunk chunk = null;
+        int unloaded = 0;
+        for (int dz = 0; dz < size; dz++) {
+            for (int dx = 0; dx < size; dx++) {
+                int x = x0 + dx;
+                int z = z0 + dz;
+                long key = ((long) (x >> 4) << 32) ^ ((z >> 4) & 0xFFFFFFFFL);
+                if (key != chunkKey) {
+                    chunkKey = key;
+                    chunk = level.getChunkSource().getChunk(x >> 4, z >> 4, ChunkStatus.FULL, false);
+                }
+                if (chunk == null) {
+                    heights.add(JsonNull.INSTANCE);
+                    surface.append('?');
+                    unloaded++;
+                    continue;
+                }
+                int top = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x & 15, z & 15);
+                BlockState st = chunk.getBlockState(mp.set(x, top, z));
+                // grass, flowers, snow layers, torches: the ground is below them
+                for (int i = 0; i < 3 && top > level.getMinY() && st.getFluidState().isEmpty() && st.canBeReplaced()
+                        && st.getCollisionShape(level, mp).isEmpty(); i++) {
+                    st = chunk.getBlockState(mp.set(x, --top, z));
+                }
+                heights.add(top);
+                surface.append(!st.getFluidState().isEmpty() ? 'w'
+                        : st.is(BlockTags.LEAVES) || st.is(BlockTags.LOGS) ? 't' : '.');
+            }
+        }
+        return Json.obj("x0", x0, "z0", z0, "size", size, "heights", heights, "surface", surface.toString(),
+                "unloaded", unloaded);
     }
 
     private JsonObject inventory(LocalPlayer p) {
@@ -333,6 +457,7 @@ public final class QueryHandler {
         String dim = McIds.dim(level);
         JsonArray out = new JsonArray();
         Set<BlockPos> seen = new HashSet<>();
+        Map<BlockPos, String> frames = Signs.frames(level, new AABB(center).inflate(radius + 1));
         int minCx = (center.getX() - radius) >> 4;
         int maxCx = (center.getX() + radius) >> 4;
         int minCz = (center.getZ() - radius) >> 4;
@@ -349,7 +474,7 @@ public final class QueryHandler {
                     if (pos.distSqr(center) > r2) {
                         continue;
                     }
-                    addIfContainer(out, seen, level, pos, dim);
+                    addIfContainer(out, seen, level, pos, dim, frames);
                 }
             }
         }
@@ -362,17 +487,27 @@ public final class QueryHandler {
             if (pos.distSqr(center) <= (long) sr * sr && level.isLoaded(pos)) {
                 BlockState st = level.getBlockState(pos);
                 if (!st.isAir() && "minecraft:crafting_table".equals(McIds.block(st))) {
-                    addIfContainer(out, seen, level, pos.immutable(), dim);
+                    addIfContainer(out, seen, level, pos.immutable(), dim, frames);
                 }
             }
         }
         return Json.obj("containers", out);
     }
 
-    private static void addIfContainer(JsonArray out, Set<BlockPos> seen, ClientLevel level, BlockPos pos, String dim) {
+    /** Adds {@code {pos, dim, block, signText?, frameItem?}} for a container block not seen yet. */
+    private static void addIfContainer(JsonArray out, Set<BlockPos> seen, ClientLevel level, BlockPos pos, String dim,
+                                       Map<BlockPos, String> frames) {
         String id = McIds.block(level.getBlockState(pos));
         if (Ids.matchesAny(CONTAINER_GLOBS, id) && seen.add(pos.immutable())) {
-            out.add(Json.obj("pos", Positions.json(pos), "dim", dim, "block", id));
+            JsonObject o = Json.obj("pos", Positions.json(pos), "dim", dim, "block", id);
+            Signs.Info label = Signs.near(level, pos, frames);
+            if (label.signText() != null) {
+                o.addProperty("signText", label.signText());
+            }
+            if (label.frameItem() != null) {
+                o.addProperty("frameItem", label.frameItem());
+            }
+            out.add(o);
         }
     }
 }

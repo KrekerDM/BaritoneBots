@@ -15,7 +15,7 @@ import java.util.Map;
  */
 public record BotConfig(String botId, String username, Server server, Login login, Companion companion,
                         Behaviour behaviour, Protection protection, Map<String, JsonElement> baritone,
-                        ClientOpts client, StatusOpts status) {
+                        ClientOpts client, StatusOpts status, Owner owner) {
 
     public BotConfig {
         server = server == null ? Server.defaults() : server;
@@ -26,13 +26,14 @@ public record BotConfig(String botId, String username, Server server, Login logi
         baritone = Copies.map(baritone);
         client = client == null ? ClientOpts.defaults() : client;
         status = status == null ? StatusOpts.defaults() : status;
+        owner = owner == null ? Owner.defaults() : owner;
     }
 
     /** Shipped defaults for a bot (low-load client, auto login, defense on, Baritone low-load set). */
     public static BotConfig defaults(String botId, String username) {
         return new BotConfig(botId, username, Server.defaults(), Login.defaults(), Companion.defaults(),
                 Behaviour.defaults(), Protection.defaults(), BaritoneDefaults.map(), ClientOpts.defaults(),
-                StatusOpts.defaults());
+                StatusOpts.defaults(), Owner.defaults());
     }
 
     /**
@@ -205,6 +206,39 @@ public record BotConfig(String botId, String username, Server server, Login logi
     public record StatusOpts(int activeIntervalTicks, int idleIntervalTicks) {
         public static StatusOpts defaults() {
             return new StatusOpts(20, 100);
+        }
+    }
+
+    /**
+     * In-game commands from the owner (SPEC §5.7e): chat lines from {@code player} whose message starts with
+     * {@code prefix} become {@code owner_command} events. Signed player chat carries its sender; system lines
+     * (chat plugins, other whisper formats) are matched with {@code patterns}, Java regexes with the named groups
+     * {@code name} and {@code msg}, tried in order with {@code find()} on the plain text; the first matching
+     * pattern decides who spoke, and the empty group {@code (?<dm>)} marks a private-message format. An empty
+     * {@code player} disables the feature.
+     */
+    public record Owner(String player, String prefix, List<String> patterns) {
+        public Owner {
+            player = player == null ? "" : player.trim();
+            prefix = prefix == null || prefix.isBlank() ? "!b" : prefix.trim();
+            patterns = Copies.list(patterns);
+        }
+
+        public static Owner defaults() {
+            return new Owner("", "!b", List.of(
+                    // vanilla / Paper public chat rendered as a system line: <Name> text
+                    "^<(?<name>[A-Za-z0-9_]{1,16})> (?<msg>.*)$",
+                    // vanilla whispers (English and Russian client language)
+                    "^(?<dm>)(?<name>[A-Za-z0-9_]{1,16}) whispers to you: (?<msg>.*)$",
+                    "^(?<dm>)(?<name>[A-Za-z0-9_]{1,16}) шепчет вам: (?<msg>.*)$",
+                    // Essentials / CMI style private messages: [Name -> me] text
+                    "^(?<dm>)\\[(?<name>[A-Za-z0-9_]{1,16}) (?:->|→|»|>>) (?:me|you|я|вам|мне)\\] (?<msg>.*)$",
+                    // chat plugins: optional [rank] / [G] tags, then Name: text or Name » text
+                    "^(?:\\[[^\\]]{0,24}\\]\\s*){0,3}(?<name>[A-Za-z0-9_]{1,16})\\s*(?::|»|>>|->|→)\\s*(?<msg>.*)$"));
+        }
+
+        public boolean enabled() {
+            return !player.isEmpty();
         }
     }
 }

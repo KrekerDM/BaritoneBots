@@ -26,7 +26,7 @@ public final class SettingsSchema {
     public static final List<String> ROLES = List.of("builder", "miner", "lumberjack", "farmer", "smelter",
             "crafter", "sorter", "rancher", "hauler", "guard");
     public static final List<String> SECTIONS = List.of("general", "runtime", "servers", "bots", "behaviour",
-            "baritone", "client", "status", "planner", "autopilot", "orders", "schedules", "rules");
+            "baritone", "client", "status", "planner", "autopilot", "keepProfiles", "orders", "schedules", "rules");
     /** {@code priority} of schedules and rules: normal = queued behind planner work, high = replaces it (§5.7b). */
     public static final List<String> STEP_PRIORITIES = List.of("normal", "high");
     /** Container roles a standing order may deliver into (besides {@code sorted:<category>} and container ids). */
@@ -151,6 +151,7 @@ public final class SettingsSchema {
         l.add(num("status.idleIntervalTicks", INT, status.get("idleIntervalTicks").getAsInt(), 1, 6000, "ticks"));
         planner(l);
         autopilot(l);
+        keepProfiles(l);
         orders(l);
         schedules(l);
         rules(l);
@@ -160,6 +161,10 @@ public final class SettingsSchema {
     private static void general(List<SchemaField> l) {
         l.add(choice("general.language", ENUM, "ru", List.of("ru", "en")));
         l.add(f("general.ownerPlayer", STRING, ""));
+        BotConfig.Owner owner = BotConfig.Owner.defaults();
+        l.add(f("general.commandPrefix", STRING, owner.prefix()));
+        l.add(f("general.ownerChatPatterns", STRING_LIST, owner.patterns()));
+        l.add(f("general.ownerReplyCommand", STRING, "/msg {player} {text}"));
         l.add(f("general.panel.bind", STRING, "127.0.0.1").applies(MANAGER_RESTART));
         l.add(num("general.panel.port", INT, 8765, 1, 65535, null).applies(MANAGER_RESTART));
         l.add(f("general.panel.openBrowser", BOOL, true));
@@ -323,6 +328,61 @@ public final class SettingsSchema {
         l.add(f("autopilot.categories", LIST, defaultCategories()));
         l.add(f("autopilot.categories[].name", STRING, null));
         l.add(f("autopilot.categories[].globs", STRING_LIST, new JsonArray()));
+        l.add(f("autopilot.signWords", MAP, defaultSignWords()));
+        l.add(f("autopilot.autoTrash.enabled", BOOL, true));
+        l.add(f("autopilot.autoTrash.junk", STRING_LIST, List.of("minecraft:dirt", "minecraft:coarse_dirt",
+                "minecraft:gravel", "minecraft:sand", "minecraft:granite", "minecraft:diorite", "minecraft:andesite",
+                "minecraft:tuff", "minecraft:cobbled_deepslate", "minecraft:rotten_flesh",
+                "minecraft:poisonous_potato", "minecraft:spider_eye", "minecraft:wheat_seeds",
+                "minecraft:beetroot_seeds")));
+        JsonObject keep = new JsonObject();
+        keep.addProperty("minecraft:sand", 64);
+        keep.addProperty("minecraft:cobbled_deepslate", 64);
+        keep.addProperty("minecraft:*_seeds", 64);
+        l.add(f("autopilot.autoTrash.keepCounts", MAP, keep));
+    }
+
+    /** Default keep profile name (SPEC §5.7f). */
+    public static final String DEFAULT_KEEP_PROFILE = "снаряжение";
+
+    /** Keep profiles (SPEC §5.7f): name → what a bot keeps when it throws away junk. */
+    private static void keepProfiles(List<SchemaField> l) {
+        JsonObject gear = Json.obj("armor", "worn", "weapon", "best", "tools", Json.arr("pickaxe", "axe"),
+                "food", Json.obj("max", 64), "blocks", Json.obj("globs", new JsonArray(), "count", 64),
+                "extra", Json.arr("minecraft:torch", "minecraft:shield", "minecraft:water_bucket"));
+        l.add(f("keepProfiles", JSON, Json.obj(DEFAULT_KEEP_PROFILE, gear)));
+    }
+
+    /**
+     * Sign words (SPEC §5.7e): a word on a sign at a container → role ({@code storage}, {@code inbox}, {@code kit},
+     * {@code supply}, {@code fuel}, {@code trash}) or sorting category ({@code sorted:<category>}). A word matches
+     * the same word, or a longer one starting with it when it has at least 4 letters (склад → склада).
+     */
+    static JsonObject defaultSignWords() {
+        JsonObject o = new JsonObject();
+        String[][] pairs = {
+                {"склад", "storage"}, {"storage", "storage"}, {"хранилище", "storage"},
+                {"приём", "inbox"}, {"прием", "inbox"}, {"inbox", "inbox"},
+                {"кит", "kit"}, {"kit", "kit"}, {"набор", "kit"},
+                {"снабжение", "supply"}, {"supply", "supply"},
+                {"топливо", "fuel"}, {"fuel", "fuel"},
+                {"мусор", "trash"}, {"trash", "trash"},
+                {"руда", "sorted:ores_ingots"}, {"руды", "sorted:ores_ingots"}, {"ores", "sorted:ores_ingots"},
+                {"ore", "sorted:ores_ingots"},
+                {"дерево", "sorted:wood"}, {"wood", "sorted:wood"},
+                {"камень", "sorted:stone_building"}, {"stone", "sorted:stone_building"},
+                {"еда", "sorted:food"}, {"еды", "sorted:food"}, {"food", "sorted:food"},
+                {"инструменты", "sorted:tools_armor"}, {"инструмент", "sorted:tools_armor"},
+                {"tools", "sorted:tools_armor"},
+                {"редстоун", "sorted:redstone"}, {"redstone", "sorted:redstone"},
+                {"ферма", "sorted:farming"}, {"farming", "sorted:farming"}, {"farm", "sorted:farming"},
+                {"мобы", "sorted:mob_drops"}, {"моб", "sorted:mob_drops"}, {"mob", "sorted:mob_drops"},
+                {"mobs", "sorted:mob_drops"},
+                {"разное", "sorted:misc"}, {"misc", "sorted:misc"}};
+        for (String[] p : pairs) {
+            o.addProperty(p[0], p[1]);
+        }
+        return o;
     }
 
     private static void orders(List<SchemaField> l) {

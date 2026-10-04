@@ -8,8 +8,8 @@ import { store, botList, loadWorld, serverOf } from "../store.js";
 import { num, noData, isNum, posText, boxText, dimLabel, shortId, timeEl } from "../format.js";
 import { argField, collect, refBotSelect } from "../forms.js";
 
-const ROLE_RE = /^(kit|storage|supply|fuel|inbox|furnace|crafting|sorted:[a-z0-9_]+)$/;
-export const CONTAINER_ROLES = ["kit", "storage", "supply", "fuel", "inbox", "furnace", "crafting", "found", "sorted:<category>"];
+const ROLE_RE = /^(kit|storage|supply|fuel|inbox|furnace|crafting|found|trash|sorted:[a-z0-9_]+)$/;
+export const CONTAINER_ROLES = ["kit", "storage", "supply", "fuel", "inbox", "furnace", "crafting", "found", "trash", "sorted:<category>"];
 
 export function render(root, params, app) {
   const servers = store.servers;

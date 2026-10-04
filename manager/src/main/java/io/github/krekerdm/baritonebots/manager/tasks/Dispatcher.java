@@ -55,6 +55,10 @@ public final class Dispatcher {
     public static final String STEP_PROGRESS = "progress";
     public static final String STEP_SORT_STORAGE = "sort_storage";
     public static final String STEP_SMELT_ALL = "smelt_all";
+    /** Throw away / store what a keep profile does not keep (SPEC §5.7f). */
+    public static final String STEP_TRASH = "trash";
+    /** Internal: resolves the position references of the task in {@code args.entry} (SPEC §5.7e). */
+    public static final String STEP_RESOLVE = "resolve";
     /** Origin of the {@code take}s auto-supply inserts: their failures never stop a scenario or a planner batch. */
     public static final String ORIGIN_SUPPLY = "supply";
     /** A stuck task is retried once after stepping back this far. */
@@ -326,6 +330,13 @@ public final class Dispatcher {
                 runStep(b, next);
                 continue;
             }
+            if (m.refs.hasRefs(next)) {
+                // position references are resolved now, at dispatch time; the task follows with coordinates
+                b.queue.poll();
+                runStep(b, QueueEntry.of(STEP_RESOLVE, Json.obj("entry", next.toJson()), 0,
+                        next.label() != null ? next.label() : next.type(), next.origin()));
+                continue;
+            }
             if (TaskTypes.CRAFT.equals(next.type())) {
                 m.goals.fillCraftGrid(b, next.args()); // before supply: it fetches the grid's ingredients
             }
@@ -414,6 +425,8 @@ public final class Dispatcher {
             case STEP_PROGRESS -> m.goals.progress(b, e);
             case STEP_SORT_STORAGE -> m.autopilot.sortNow(b, e);
             case STEP_SMELT_ALL -> io.github.krekerdm.baritonebots.manager.projects.Smelter.smeltAll(m, b, e);
+            case STEP_TRASH -> m.autopilot.trash().run(b, e);
+            case STEP_RESOLVE -> m.refs.runStep(b, e);
             default -> stepFailed(b, e, Reasons.UNSUPPORTED, "manager step '" + e.type() + "' is not implemented yet");
         }
     }
@@ -762,7 +775,10 @@ public final class Dispatcher {
     private boolean depositAndRetry(BotState b, QueueEntry e, Run run) {
         boolean allowed = run != null ? run.fullRetries < MAX_FULL_RETRIES
                 : m.config.get().planner().autoDepositWhenFull() && e.fullRetries() < MAX_FULL_RETRIES;
-        if (!allowed || storageFor(b).isEmpty()) {
+        boolean storage = !storageFor(b).isEmpty();
+        // auto-trash (SPEC §5.7f): junk is thrown on the spot instead of walking to storage
+        boolean trash = allowed && m.autopilot.trash().autoTrashFits(b, e.type(), storage);
+        if (!allowed || !storage && !trash) {
             return false;
         }
         if (run != null) {
@@ -771,10 +787,14 @@ public final class Dispatcher {
         int n = e.fullRetries() + 1;
         QueueEntry again = new QueueEntry(Tokens.id("t"), e.type(), e.args(), e.timeoutSec(), e.label(), e.origin(),
                 System.currentTimeMillis(), e.attempts(), n);
-        QueueEntry deposit = new QueueEntry(Tokens.id("t"), STEP_DEPOSIT_STORAGE, new JsonObject(), 0, null, e.origin(),
-                System.currentTimeMillis(), 0, n);
-        b.queue.pushFront(List.of(deposit, again));
-        m.event("deposit_retry", Levels.INFO, b.id, "event.task.depositRetry",
+        QueueEntry first = trash
+                ? new QueueEntry(Tokens.id("t"), STEP_TRASH, Json.obj("to", "drop", "_junk", true), 0, null, e.origin(),
+                        System.currentTimeMillis(), 0, n)
+                : new QueueEntry(Tokens.id("t"), STEP_DEPOSIT_STORAGE, new JsonObject(), 0, null, e.origin(),
+                        System.currentTimeMillis(), 0, n);
+        b.queue.pushFront(List.of(first, again));
+        m.event(trash ? "trash_retry" : "deposit_retry", Levels.INFO, b.id,
+                trash ? "event.task.trashRetry" : "event.task.depositRetry",
                 Map.of("bot", b.id, "task", e.type(), "n", run != null ? run.fullRetries : n));
         return true;
     }

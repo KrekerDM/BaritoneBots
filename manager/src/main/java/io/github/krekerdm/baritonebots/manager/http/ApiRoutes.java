@@ -14,6 +14,8 @@ import io.github.krekerdm.baritonebots.manager.config.ConfigValidator;
 import io.github.krekerdm.baritonebots.manager.config.ManagerConfig;
 import io.github.krekerdm.baritonebots.manager.config.SettingsSchema;
 import io.github.krekerdm.baritonebots.manager.config.ValidationException;
+import io.github.krekerdm.baritonebots.manager.projects.Project;
+import io.github.krekerdm.baritonebots.manager.refs.Refs;
 import io.github.krekerdm.baritonebots.manager.tasks.JsonItemStore;
 import io.github.krekerdm.baritonebots.manager.tasks.QueueEntry;
 import io.github.krekerdm.baritonebots.manager.tasks.TaskQueue;
@@ -324,6 +326,23 @@ final class ApiRoutes {
         return b;
     }
 
+    /** Waits (HTTP thread) for a reference resolution started on the loop; its failures become 400 / 504. */
+    private static JsonObject awaitRefs(CompletableFuture<JsonObject> f) {
+        try {
+            return f.get(io.github.krekerdm.baritonebots.manager.refs.RefResolver.HTTP_WAIT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            throw new ApiException(504, "timeout", "resolving the position references took too long");
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof ApiException ae) {
+                throw ae;
+            }
+            throw ApiException.badRequest("bad_ref", String.valueOf(e.getCause().getMessage()));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ApiException(503, "busy", "interrupted");
+        }
+    }
+
     /** Sends a query on the loop, waits for the reply here. Returns the {@code result} payload. */
     private JsonObject query(String botId, String kind, JsonObject args) {
         CompletableFuture<QueryResult> f = loop(() -> linked(m.bots.require(botId)).session.query(kind, args, QUERY_TIMEOUT_MS));
@@ -472,12 +491,17 @@ final class ApiRoutes {
     private void world(Router r) {
         r.get("/api/world/{serverId}", q -> loop(() -> m.worlds.get(server(q.param("serverId")).id()).toJson()));
         r.put("/api/world/{serverId}", q -> {
-            JsonObject body = q.json();
+            JsonObject raw = q.json();
+            String serverId = loop(() -> server(q.param("serverId")).id());
+            // position references in waypoints / areas / zones (SPEC §5.7e) are resolved before saving
+            JsonObject body = awaitRefs(loop(() -> m.refs.resolveWorld(serverId, raw)));
             return loop(() -> {
                 String sid = server(q.param("serverId")).id();
                 WorldDoc doc = m.worlds.get(sid);
                 WorldDoc.fromJson(doc.toJson()).applySections(body); // validate on a copy first
+                var rolesBefore = doc.rolesById();
                 doc.applySections(body);
+                doc.markManualRoles(rolesBefore); // roles the user changed beat signs and the autopilot
                 m.worlds.markDirty(sid);
                 if (body.has("zones")) {
                     m.pushConfigForServer(sid);
@@ -529,12 +553,20 @@ final class ApiRoutes {
     private void projects(Router r) {
         r.get("/api/projects", q -> loop(() -> Json.obj("projects", Json.arrOf(m.projects.list()))));
         r.post("/api/projects", q -> {
-            JsonObject body = q.json();
+            JsonObject raw = q.json();
+            JsonObject body = awaitRefs(loop(() -> m.refs.resolveProject(raw))); // SPEC §5.7e references
             return loop(() -> new HttpApi.Status(201, m.projects.create(body)));
         });
         r.get("/api/projects/{id}", q -> loop(() -> m.projects.view(m.projects.require(q.param("id")), true)));
         r.put("/api/projects/{id}", q -> {
-            JsonObject body = q.json();
+            JsonObject raw = q.json();
+            JsonObject body = awaitRefs(loop(() -> {
+                Project p = m.projects.require(q.param("id"));
+                JsonObject full = p.definition();
+                raw.entrySet().forEach(e -> full.add(e.getKey(), e.getValue()));
+                return Refs.contains(raw.get("config")) || Refs.contains(raw.get("placement"))
+                        ? m.refs.resolveProject(full) : CompletableFuture.completedFuture(raw);
+            }));
             return loop(() -> m.projects.replace(q.param("id"), body));
         });
         r.delete("/api/projects/{id}", q -> loop(() -> {

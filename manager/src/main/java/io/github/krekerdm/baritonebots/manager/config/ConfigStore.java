@@ -173,9 +173,12 @@ public final class ConfigStore {
         JsonObject out = Json.deepMerge(SettingsSchema.defaults(), in);
         for (SchemaField f : SettingsSchema.fields()) {
             if (!f.isItemField() && (SchemaField.MAP.equals(f.type()) || SchemaField.JSON.equals(f.type()))) {
-                JsonElement given = in.get(f.path());
-                if (given != null && !given.isJsonNull() && !f.path().contains(".")) {
-                    out.add(f.path(), given.deepCopy());
+                JsonElement given = in;
+                for (String part : f.path().split("\\.")) {
+                    given = given != null && given.isJsonObject() ? given.getAsJsonObject().get(part) : null;
+                }
+                if (given != null && !given.isJsonNull()) {
+                    SettingsSchema.put(out, f.path(), given.deepCopy()); // a deleted default entry stays deleted
                 }
             }
         }

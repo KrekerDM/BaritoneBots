@@ -88,6 +88,35 @@ public final class TaskArgs {
         }
     }
 
+    /**
+     * {@code [{slot, item, count?}]} (player inventory slot 0..35, item id expected there, count -1 / absent = the
+     * whole stack), keyed by slot; later duplicates of a slot are ignored.
+     */
+    public static Map<Integer, SlotPick> slotPicks(JsonObject args, String key) {
+        Map<Integer, SlotPick> out = new LinkedHashMap<>();
+        JsonArray a = Json.getArr(args, key);
+        if (a != null) {
+            for (JsonElement e : a) {
+                if (e.isJsonObject()) {
+                    JsonObject o = e.getAsJsonObject();
+                    int slot = Json.getInt(o, "slot", -1);
+                    String item = Json.getString(o, "item", null);
+                    if (slot >= 0 && item != null && !item.isBlank()) {
+                        out.putIfAbsent(slot, new SlotPick(slot, Ids.normalize(item.trim()), Json.getInt(o, "count", -1)));
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /** One stack chosen by the manager (trash, SPEC §5.7f). */
+    public record SlotPick(int slot, String item, int count) {
+        public boolean whole() {
+            return count < 0;
+        }
+    }
+
     /** {@code {id: count}} as a JSON object. */
     public static JsonObject counts(Map<String, Integer> m) {
         JsonObject o = new JsonObject();

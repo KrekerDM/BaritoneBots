@@ -7,6 +7,7 @@ import io.github.krekerdm.baritonebots.common.msg.Reasons;
 import io.github.krekerdm.baritonebots.mod.task.ContainerSession;
 import io.github.krekerdm.baritonebots.mod.task.TaskArgs;
 import io.github.krekerdm.baritonebots.mod.task.TaskArgs.ItemRequest;
+import io.github.krekerdm.baritonebots.mod.task.TaskArgs.SlotPick;
 import io.github.krekerdm.baritonebots.mod.task.TaskContext;
 import io.github.krekerdm.baritonebots.mod.task.TaskExecutor;
 import io.github.krekerdm.baritonebots.mod.task.plan.SlotMoves;
@@ -18,6 +19,7 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,7 +27,9 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * {@code drop items:[{item:glob,count}]} ({@code count} -1 = all): throws matching items from the main inventory,
+ * {@code drop items:[{item:glob,count}]} ({@code count} -1 = all) and/or {@code slots:[{slot,item,count?}]} (exact
+ * inventory stacks chosen by the manager's trash step; a stack whose item changed meanwhile is left alone): throws
+ * matching items from the main inventory,
  * hotbar and offhand (never worn armor) with {@code THROW} clicks in the player's own menu — button 1 throws a whole
  * stack, button 0 one item; a partial count is either thrown item by item or first split into an empty slot,
  * whichever needs fewer clicks ({@link SlotMoves#throwMode}). The bot looks straight ahead first so the items land a
@@ -33,6 +37,9 @@ import java.util.Set;
  */
 public final class DropTask implements TaskExecutor {
     private List<ItemRequest> requests;
+    private Map<Integer, SlotPick> picks;
+    private final Map<Integer, Integer> pickStart = new HashMap<>();
+    private final Set<Integer> picksDone = new HashSet<>();
     private final Set<Integer> exhausted = new HashSet<>();
     private final Set<Integer> stuck = new HashSet<>();
     private Map<String, Integer> before;
@@ -43,11 +50,17 @@ public final class DropTask implements TaskExecutor {
     @Override
     public void start(TaskContext ctx) {
         requests = TaskArgs.itemRequests(ctx.args(), "items");
-        if (requests.isEmpty()) {
-            ctx.fail(Reasons.BAD_ARGS, "drop needs 'items'", null);
+        picks = TaskArgs.slotPicks(ctx.args(), "slots");
+        if (requests.isEmpty() && picks.isEmpty()) {
+            ctx.fail(Reasons.BAD_ARGS, "drop needs 'items' or 'slots'", null);
             return;
         }
         LocalPlayer p = ctx.player();
+        for (SlotPick pk : picks.values()) {
+            if (pk.slot() < Inv.MAIN_SIZE) {
+                pickStart.put(pk.slot(), p.getInventory().getItem(pk.slot()).getCount());
+            }
+        }
         before = Inv.totals(p, false);
         p.setXRot(0f); // sent with the next movement packet, before the session settles
         session = ContainerSession.playerInventory();
@@ -100,26 +113,56 @@ public final class DropTask implements TaskExecutor {
                 exhausted.add(i);
                 continue;
             }
-            int c = src.getItem().getCount();
-            Slot empty = TakeTask.firstEmpty(session.mainSlots(p));
-            ctx.step("dropping " + McIds.item(src.getItem()), -1);
-            switch (SlotMoves.throwMode(c, want, empty != null)) {
-                case WHOLE -> session.click(src, 1, ContainerInput.THROW);
-                case SPLIT -> {
-                    session.movePartial(src, empty, want);
-                    session.click(empty, 1, ContainerInput.THROW);
-                }
-                case SINGLES -> {
-                    for (int k = 0; k < want; k++) {
-                        session.click(src, 0, ContainerInput.THROW);
-                    }
+            throwFrom(ctx, p, src, want);
+            return true;
+        }
+        for (SlotPick pk : picks.values()) {
+            if (picksDone.contains(pk.slot())) {
+                continue;
+            }
+            Slot src = null;
+            for (Slot s : slots) {
+                if (s.getContainerSlot() == pk.slot()) {
+                    src = s;
+                    break;
                 }
             }
-            watchSlot = src.index;
-            watchCount = c;
+            ItemStack st = src == null ? ItemStack.EMPTY : src.getItem();
+            if (src == null || st.isEmpty() || stuck.contains(src.index) || !pk.item().equals(McIds.item(st))) {
+                picksDone.add(pk.slot()); // emptied, refused or changed since the manager looked: leave it
+                continue;
+            }
+            int thrown = Math.max(0, pickStart.getOrDefault(pk.slot(), st.getCount()) - st.getCount());
+            int want = pk.whole() ? st.getCount() : Math.min(st.getCount(), pk.count() - thrown);
+            if (want <= 0) {
+                picksDone.add(pk.slot());
+                continue;
+            }
+            throwFrom(ctx, p, src, want);
             return true;
         }
         return false;
+    }
+
+    /** Throws {@code want} items from {@code src}: whole stack, one by one, or split first (fewest clicks). */
+    private void throwFrom(TaskContext ctx, LocalPlayer p, Slot src, int want) {
+        int c = src.getItem().getCount();
+        Slot empty = TakeTask.firstEmpty(session.mainSlots(p));
+        ctx.step("dropping " + McIds.item(src.getItem()), -1);
+        switch (SlotMoves.throwMode(c, want, empty != null)) {
+            case WHOLE -> session.click(src, 1, ContainerInput.THROW);
+            case SPLIT -> {
+                session.movePartial(src, empty, want);
+                session.click(empty, 1, ContainerInput.THROW);
+            }
+            case SINGLES -> {
+                for (int k = 0; k < want; k++) {
+                    session.click(src, 0, ContainerInput.THROW);
+                }
+            }
+        }
+        watchSlot = src.index;
+        watchCount = c;
     }
 
     /** Main, hotbar and offhand slots of the player's own menu. */

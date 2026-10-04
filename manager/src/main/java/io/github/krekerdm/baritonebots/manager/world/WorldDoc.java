@@ -25,7 +25,7 @@ import java.util.Set;
 public final class WorldDoc {
     /** {@code found}: discovered away from home by the autopilot; a source only with {@code autopilot.useFound}. */
     public static final Set<String> CONTAINER_ROLES = Set.of("kit", "storage", "supply", "fuel", "inbox", "furnace",
-            "crafting", "found");
+            "crafting", "found", "trash");
     public static final String SORTED_PREFIX = "sorted:";
     public static final int MAX_DEATHS = 200;
 
@@ -48,11 +48,27 @@ public final class WorldDoc {
         }
     }
 
-    /** {@code snapshot == null} means the contents are unknown (never inspected). */
+    /** Who set a container's roles: precedence manual &gt; sign &gt; auto (SPEC §5.7e). */
+    public static final String SOURCE_MANUAL = "manual";
+    public static final String SOURCE_SIGN = "sign";
+    public static final String SOURCE_AUTO = "auto";
+    /** Roles only a person sets (see {@link Container#manual()}). */
+    static final Set<String> LEGACY_MANUAL = Set.of("inbox", "kit", "supply", "fuel", "trash");
+
+    /**
+     * {@code snapshot == null} means the contents are unknown (never inspected). {@code signText} / {@code frameItem}
+     * = the label last seen on the container (null = none); {@code roleSource} = who set {@code roles}
+     * ({@link #SOURCE_MANUAL}, {@link #SOURCE_SIGN}, {@link #SOURCE_AUTO}; null = auto).
+     */
     public record Container(String id, String dim, Pos pos, String block, List<String> roles, String label,
-                            Snapshot snapshot, long lastSeen) {
+                            Snapshot snapshot, long lastSeen, String signText, String frameItem, String roleSource) {
         public Container {
             roles = roles == null ? List.of() : List.copyOf(roles);
+        }
+
+        public Container(String id, String dim, Pos pos, String block, List<String> roles, String label,
+                         Snapshot snapshot, long lastSeen) {
+            this(id, dim, pos, block, roles, label, snapshot, lastSeen, null, null, null);
         }
 
         public boolean hasRole(String role) {
@@ -60,11 +76,35 @@ public final class WorldDoc {
         }
 
         public Container withSnapshot(String newBlock, Snapshot s, long seen) {
-            return new Container(id, dim, pos, newBlock == null ? block : newBlock, roles, label, s, seen);
+            return new Container(id, dim, pos, newBlock == null ? block : newBlock, roles, label, s, seen, signText,
+                    frameItem, roleSource);
         }
 
+        /** New roles from an automatic source (keeps the recorded source). */
         public Container withRoles(List<String> newRoles) {
-            return new Container(id, dim, pos, block, newRoles, label, snapshot, lastSeen);
+            return new Container(id, dim, pos, block, newRoles, label, snapshot, lastSeen, signText, frameItem,
+                    roleSource);
+        }
+
+        public Container withRoles(List<String> newRoles, String source) {
+            return new Container(id, dim, pos, block, newRoles, label, snapshot, lastSeen, signText, frameItem, source);
+        }
+
+        public Container withLabel(String newSignText, String newFrameItem) {
+            return new Container(id, dim, pos, block, roles, label, snapshot, lastSeen, newSignText, newFrameItem,
+                    roleSource);
+        }
+
+        /**
+         * Roles set by hand. Containers saved before role sources existed count as manual when they carry a role the
+         * autopilot never assigns ({@code inbox}, {@code kit}, {@code supply}, {@code fuel}, {@code trash}).
+         */
+        public boolean manual() {
+            return SOURCE_MANUAL.equals(roleSource) || roleSource == null && roles.stream().anyMatch(LEGACY_MANUAL::contains);
+        }
+
+        public boolean fromSign() {
+            return SOURCE_SIGN.equals(roleSource);
         }
 
         /** The {@code sorted:<category>} role's category, or null. */
@@ -111,6 +151,28 @@ public final class WorldDoc {
             }
         }
         containers.add(updated);
+    }
+
+    /** Container id → roles, to compare before / after a panel edit ({@link #markManualRoles}). */
+    public Map<String, List<String>> rolesById() {
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        containers.forEach(c -> out.put(c.id(), c.roles()));
+        return out;
+    }
+
+    /**
+     * After the user edited the containers: those whose roles changed, and new ones given roles, count as set by hand
+     * ({@link #SOURCE_MANUAL}, never overridden by signs or the autopilot).
+     */
+    public void markManualRoles(Map<String, List<String>> before) {
+        for (int i = 0; i < containers.size(); i++) {
+            Container c = containers.get(i);
+            List<String> old = before.get(c.id());
+            boolean changed = old == null ? !c.roles().isEmpty() : !old.equals(c.roles());
+            if (changed && !SOURCE_MANUAL.equals(c.roleSource())) {
+                containers.set(i, c.withRoles(c.roles(), SOURCE_MANUAL));
+            }
+        }
     }
 
     public void addDeath(Death d) {
@@ -165,9 +227,14 @@ public final class WorldDoc {
                     }
                 }
                 String id = Json.getString(o, "id", null);
+                String source = Json.getString(o, "roleSource", null);
+                if (source != null && !List.of(SOURCE_MANUAL, SOURCE_SIGN, SOURCE_AUTO).contains(source)) {
+                    throw ValidationException.of(p + ".roleSource", "enum");
+                }
                 l.add(new Container(id == null || id.isBlank() ? Tokens.id("c") : id, dim(o, p), pos(o, "pos", p),
                         Json.getString(o, "block", "minecraft:chest"), roles, Json.getString(o, "label", ""), snap,
-                        Json.getLong(o, "lastSeen", 0)));
+                        Json.getLong(o, "lastSeen", 0), Json.getString(o, "signText", null),
+                        Json.getString(o, "frameItem", null), source));
             });
             containers.clear();
             containers.addAll(l);
