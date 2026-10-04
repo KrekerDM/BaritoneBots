@@ -210,4 +210,27 @@ class LinkDispatchTest {
                 new io.github.krekerdm.baritonebots.common.geom.Pos(10, 64, 0)).snapshot().totals().get("minecraft:cobblestone"));
         assertEquals(64, stone);
     }
+
+    @Test
+    void companionPluginMessagesAreRelayed() throws Exception {
+        FakeBot bot = new FakeBot().hello("bot1");
+        bot.send(MessageTypes.PLUGIN, Json.obj("payload", Json.obj("t", "notice", "d", Json.obj("message", "restart in 5 min"))));
+        bot.send(MessageTypes.PLUGIN, Json.obj("payload", Json.obj("t", "rollback_result",
+                "d", Json.obj("ok", true, "restored", 12, "via", "journal", "message", ""))));
+        bot.send(MessageTypes.PLUGIN, Json.obj("payload", Json.obj("t", "welcome", "d", Json.obj("features", Json.arr("journal")))));
+        Thread.sleep(300);
+        var events = m.loop.await(() -> m.events.query(50, "bot1", null));
+        assertTrue(events.stream().anyMatch(e -> "plugin_notice".equals(e.kind()) && "plugin".equals(e.source())
+                && e.message().contains("restart in 5 min")));
+        assertTrue(events.stream().anyMatch(e -> "plugin_rollback".equals(e.kind())));
+        JsonObject stored = m.loop.await(() -> m.botView(m.bots.require("bot1")).getAsJsonObject("plugin"));
+        assertEquals(3, stored.size(), "last payload per type");
+        assertEquals(12, stored.getAsJsonObject("rollback_result").getAsJsonObject("d").get("restored").getAsInt());
+
+        // manager → plugin goes out as a 'plugin' message to the bot
+        m.loop.awaitRun(() -> m.bots.require("bot1").session.send(MessageTypes.PLUGIN,
+                Json.obj("payload", Json.obj("t", "journal", "d", Json.obj("target", "Bot1", "minutes", 5)))));
+        Envelope out = bot.expect(MessageTypes.PLUGIN);
+        assertEquals("journal", out.d().getAsJsonObject("payload").get("t").getAsString());
+    }
 }

@@ -1,0 +1,7 @@
+{
+ "type": "minecraft:campfire_cooking",
+ "ingredient": "minecraft:beef",
+ "result": {
+  "id": "minecraft:cooked_beef"
+ }
+}

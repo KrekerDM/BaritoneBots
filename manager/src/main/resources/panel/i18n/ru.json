@@ -650,5 +650,21 @@
   "set.rt.reinstall": "Переустановить",
   "set.rt.reinstallText": "Скачать и установить HeadlessMC, Fabric и моды заново? Запущенные боты работают со старыми файлами до перезапуска.",
   "set.rt.live": "Идёт установка; состояние выше обновляется само.",
-  "set.rt.loadFailed": "Состояние среды не загрузилось"
+  "set.rt.loadFailed": "Состояние среды не загрузилось",
+
+  "source.storage": "со склада",
+  "source.mine": "добыча",
+  "source.craft": "крафт",
+  "source.smelt": "плавка",
+  "source.manual": "вручную",
+  "work.build_sector": "стройка",
+  "work.haul": "перенос",
+  "work.mine": "добыча",
+  "work.craft": "крафт",
+  "work.smelt": "плавка",
+  "pfield.origin": "Точка вставки (угол схемы)",
+  "pfield.dim": "Измерение",
+  "pfield.rotation": "Поворот",
+  "pfield.mirror": "Отражение",
+  "pfield.supply": "Сундуки снабжения (пусто = роль «supply»)"
 }

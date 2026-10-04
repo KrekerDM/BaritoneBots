@@ -63,6 +63,9 @@ public final class BotState {
     /** Between a death and the respawn: nothing is dispatched. */
     public boolean dead;
 
+    // ---- companion plugin (SPEC §7): last payload per message type, as relayed by the bot
+    public final java.util.Map<String, JsonObject> plugin = new java.util.LinkedHashMap<>();
+
     public BotState(ManagerConfig.BotDef def) {
         this.id = def.id();
         this.def = def;

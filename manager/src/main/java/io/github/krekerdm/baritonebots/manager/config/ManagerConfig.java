@@ -54,7 +54,7 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
                              String headlessmcUrl, String headlessmcSha256, String fabricInstallerUrl,
                              String javaPath, List<ModEntry> mods, int startStaggerSec, String priority,
                              Restart restart, String memoryPreset, int memoryMb, String jvmArgs, int gcThreads,
-                             int maxHeavyTasks) {
+                             int maxHeavyTasks, String gameDataPath) {
         public RuntimeCfg {
             mods = mods == null ? List.of() : List.copyOf(mods);
             jvmArgs = jvmArgs == null ? "" : jvmArgs;
@@ -72,6 +72,11 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
 
         public String headlessmcJarName() {
             return "headlessmc-launcher-" + headlessmcVersion + ".jar";
+        }
+
+        /** Explicit client jar / data folder for game data, or null to look under runtime/mc/versions. */
+        public String gameDataPathOrNull() {
+            return gameDataPath == null || gameDataPath.isBlank() ? null : gameDataPath.trim();
         }
 
         public String javaPathOrNull() {
@@ -92,13 +97,20 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
 
     /** Server profile; the companion token lives in secrets.json, not here. */
     public record ServerProfile(String id, String name, String address, boolean autoConnect, JsonObject reconnect,
-                                JsonObject login, CompanionCfg companion, JsonObject protection, JsonObject baritone) {
+                                JsonObject login, CompanionCfg companion, JsonObject protection, JsonObject baritone,
+                                String antiXray) {
+        /** {@code antiXray} values (SPEC §5.7b3): Paper anti-xray off, engine-mode 1 (hide), engine-mode 2 (fake ores). */
+        public static final String ANTI_XRAY_NONE = "none";
+        public static final String ANTI_XRAY_HIDE = "hide";
+        public static final String ANTI_XRAY_FAKE = "fake";
+
         public ServerProfile {
             reconnect = orEmpty(reconnect);
             login = orEmpty(login);
             companion = companion == null ? new CompanionCfg(false) : companion;
             protection = orEmpty(protection);
             baritone = orEmpty(baritone);
+            antiXray = antiXray == null || antiXray.isBlank() ? ANTI_XRAY_NONE : antiXray;
         }
     }
 

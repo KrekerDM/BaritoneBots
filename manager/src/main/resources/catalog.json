@@ -144,5 +144,14 @@
     {"step": "sort_storage", "continuous": false, "heavy": false, "supported": false, "args": []},
     {"step": "smelt_all", "continuous": false, "heavy": false, "supported": false, "args": []}
   ],
-  "roles": ["builder", "miner", "lumberjack", "farmer", "smelter", "crafter", "sorter", "rancher", "hauler", "guard"]
+  "roles": ["builder", "miner", "lumberjack", "farmer", "smelter", "crafter", "sorter", "rancher", "hauler", "guard"],
+  "projectKinds": [
+    {"kind": "build", "supported": true, "args": [
+      {"name": "origin", "type": "pos", "required": true},
+      {"name": "dim", "type": "dim", "required": true, "default": "minecraft:overworld"},
+      {"name": "rotation", "type": "enum", "enum": [0, 90, 180, 270], "required": true, "default": 0},
+      {"name": "mirror", "type": "enum", "enum": ["none", "front_back", "left_right"], "required": true, "default": "none"},
+      {"name": "supply", "type": "containers", "required": false}
+    ]}
+  ]
 }

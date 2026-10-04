@@ -198,6 +198,7 @@ public final class SettingsSchema {
         l.add(num("runtime.memoryMb", INT, 1024, 512, 32768, "MB").applies(BOT_RESTART));
         l.add(f("runtime.jvmArgs", STRING, "").applies(BOT_RESTART));
         l.add(num("runtime.gcThreads", INT, 2, 1, 16, null).applies(BOT_RESTART));
+        l.add(f("runtime.gameDataPath", STRING, null).asNullable());
         l.add(num("runtime.maxHeavyTasks", INT, 2, 0, 64, null));
     }
 
@@ -230,6 +231,7 @@ public final class SettingsSchema {
         l.add(f("servers[].protection.noBreak", STRING_LIST, at(protection, "noBreak")));
         l.add(f("servers[].protection.zones", JSON, new JsonArray()));
         l.add(f("servers[].baritone", MAP, new JsonObject()));
+        l.add(choice("servers[].antiXray", ENUM, "none", List.of("none", "hide", "fake")));
     }
 
     private static void bots(List<SchemaField> l) {

@@ -650,5 +650,21 @@
   "set.rt.reinstall": "Reinstall",
   "set.rt.reinstallText": "Download and install HeadlessMC, Fabric and the mods again? Running bots keep the files they started with until restart.",
   "set.rt.live": "Installing; the state above updates by itself.",
-  "set.rt.loadFailed": "Runtime state did not load"
+  "set.rt.loadFailed": "Runtime state did not load",
+
+  "source.storage": "from storage",
+  "source.mine": "mining",
+  "source.craft": "crafting",
+  "source.smelt": "smelting",
+  "source.manual": "add by hand",
+  "work.build_sector": "build",
+  "work.haul": "haul",
+  "work.mine": "mine",
+  "work.craft": "craft",
+  "work.smelt": "smelt",
+  "pfield.origin": "Origin (schematic corner)",
+  "pfield.dim": "Dimension",
+  "pfield.rotation": "Rotation",
+  "pfield.mirror": "Mirror",
+  "pfield.supply": "Supply containers (empty = role 'supply')"
 }

@@ -28,10 +28,13 @@ import io.github.krekerdm.baritonebots.manager.events.EventLog;
 import io.github.krekerdm.baritonebots.manager.events.I18n;
 import io.github.krekerdm.baritonebots.manager.events.ManagerEvent;
 import io.github.krekerdm.baritonebots.manager.events.SseHub;
+import io.github.krekerdm.baritonebots.manager.gamedata.GameDataService;
 import io.github.krekerdm.baritonebots.manager.http.HttpApi;
 import io.github.krekerdm.baritonebots.manager.link.LinkServer;
 import io.github.krekerdm.baritonebots.manager.link.LinkSession;
+import io.github.krekerdm.baritonebots.manager.planner.Planner;
 import io.github.krekerdm.baritonebots.manager.process.ProcessSupervisor;
+import io.github.krekerdm.baritonebots.manager.projects.ProjectService;
 import io.github.krekerdm.baritonebots.manager.runtime.RuntimeInstaller;
 import io.github.krekerdm.baritonebots.manager.tasks.Dispatcher;
 import io.github.krekerdm.baritonebots.manager.tasks.JsonItemStore;
@@ -73,6 +76,9 @@ public final class Manager implements LinkServer.Handler {
     public final Dispatcher dispatcher;
     public final RuntimeInstaller installer;
     public final ProcessSupervisor supervisor;
+    public final GameDataService gameData;
+    public final Planner planner;
+    public final ProjectService projects;
     public final LinkServer link;
     public final HttpApi http;
     private Tray tray;
@@ -103,6 +109,9 @@ public final class Manager implements LinkServer.Handler {
         dispatcher = new Dispatcher(this, dataDir.resolve("queues.json"));
         installer = new RuntimeInstaller(this, dataDir.resolve("runtime"));
         supervisor = new ProcessSupervisor(this, dataDir.resolve("bots"));
+        gameData = new GameDataService(loop, installer::mcDir, config::get);
+        planner = new Planner(this);
+        projects = new ProjectService(this, planner, dataDir.resolve("projects"));
         link = new LinkServer(loop, this);
         http = new HttpApi(this);
     }
@@ -124,14 +133,27 @@ public final class Manager implements LinkServer.Handler {
             }
             bots.sync(config.get());
             dispatcher.loadQueues();
+            dispatcher.setHooks(planner);
+            planner.setAfterTick(projects::afterTick);
+            projects.load();
             installer.init();
             config.addListener(this::onConfigChanged);
+        });
+    }
+
+    /** Starts the planner tick and re-registers running projects. Part of {@link #start()}; tests call it alone. */
+    public void startPlanner() {
+        loop.awaitRun(() -> {
+            gameData.ensureLoaded();
+            planner.start();
+            projects.resumeRunning();
         });
     }
 
     /** Starts listeners, the tray and (optionally) the bots. Called once from {@link ManagerMain}. */
     public void start() throws IOException {
         initState();
+        startPlanner();
         ManagerConfig cfg = config.get();
         link.start(cfg.general().link().bind(), cfg.general().link().port());
         http.start(cfg.general().panel().bind(), cfg.general().panel().port());
@@ -186,7 +208,9 @@ public final class Manager implements LinkServer.Handler {
         link.stop();
         try {
             loop.awaitRun(() -> {
+                planner.stop();
                 dispatcher.saveQueues();
+                projects.flush();
                 worlds.flush();
                 events.close();
             });
@@ -258,6 +282,9 @@ public final class Manager implements LinkServer.Handler {
         }
         o.add("status", b.status == null ? JsonNull.INSTANCE : Json.toTree(b.status));
         o.add("queue", dispatcher.queueView(b));
+        if (!b.plugin.isEmpty()) {
+            o.add("plugin", Json.toTree(b.plugin));
+        }
         if (b.sentConfig != null) {
             o.add("config", BotConfigFactory.redacted(b.sentConfig));
         }
@@ -298,8 +325,9 @@ public final class Manager implements LinkServer.Handler {
         JsonArray botsArr = new JsonArray();
         bots.all().forEach(b -> botsArr.add(botView(b)));
         JsonArray servers = Json.getArr(config.viewForPanel(), "servers");
-        return Json.obj("version", version, "bots", botsArr, "projects", new JsonArray(),
+        return Json.obj("version", version, "bots", botsArr, "projects", Json.arrOf(projects.list()),
                 "servers", servers == null ? new JsonArray() : servers, "runtime", installer.view(),
+                "gameData", gameData.view(),
                 "eventsTail", Json.arrOf(events.query(200, null, null)),
                 "language", config.get().general().language(), "time", System.currentTimeMillis());
     }
@@ -327,6 +355,8 @@ public final class Manager implements LinkServer.Handler {
         if (old == null || old.runtime().maxHeavyTasks() != nu.runtime().maxHeavyTasks()) {
             dispatcher.dispatchAll();
         }
+        gameData.invalidate(nu);
+        planner.retime();
     }
 
     // ------------------------------------------------------------------ link callbacks (loop)
@@ -387,9 +417,7 @@ public final class Manager implements LinkServer.Handler {
                 case MessageTypes.EVENT -> onBotEvent(b, e.payload(BotEvent.class));
                 case MessageTypes.CONTAINER -> onContainer(b, e.payload(ContainerSnapshot.class));
                 case MessageTypes.LOG -> onLog(b, e.payload(LogLine.class));
-                case MessageTypes.PLUGIN -> {
-                    // companion plugin bridge is phase 2
-                }
+                case MessageTypes.PLUGIN -> onPlugin(b, e.d());
                 default -> Log.warn("%s sent unknown message type '%s'", b.id, e.t());
             }
         } catch (RuntimeException ex) {
@@ -435,6 +463,51 @@ public final class Manager implements LinkServer.Handler {
         }
         worlds.onSnapshot(b.def.serverId(), snap);
         broadcastWorld(b.def.serverId());
+    }
+
+    /** Max distinct plugin message types remembered per bot. */
+    static final int PLUGIN_TYPES_KEPT = 16;
+
+    /**
+     * Companion plugin message relayed by the bot ({@code plugin {payload}}, payload = the plugin's envelope, SPEC §7):
+     * the last payload per type is kept on the bot; {@code notice}, {@code rollback_result} and {@code journal_result}
+     * become events. {@code welcome}/{@code reject} are already reported by the bot as {@code companion} events.
+     */
+    private void onPlugin(BotState b, JsonObject d) {
+        JsonObject payload = d == null ? null : Json.getObj(d, "payload");
+        if (payload == null) {
+            return;
+        }
+        String t = Json.getString(payload, "t", "unknown");
+        JsonObject stored = payload.deepCopy();
+        stored.addProperty("receivedAt", System.currentTimeMillis());
+        b.plugin.remove(t);
+        b.plugin.put(t, stored);
+        while (b.plugin.size() > PLUGIN_TYPES_KEPT) {
+            b.plugin.remove(b.plugin.keySet().iterator().next());
+        }
+        JsonObject pd = Json.getObj(payload, "d");
+        JsonObject data = pd == null ? new JsonObject() : pd.deepCopy();
+        switch (t) {
+            case "notice" -> pluginEvent(b, "plugin_notice", Levels.INFO, "event.plugin.notice",
+                    Map.of("bot", b.id, "message", Json.getString(data, "message", "")), data);
+            case "rollback_result" -> pluginEvent(b, "plugin_rollback",
+                    Json.getBool(data, "ok", false) ? Levels.INFO : Levels.WARN, "event.plugin.rollback",
+                    Map.of("bot", b.id, "ok", Json.getBool(data, "ok", false), "restored", Json.getInt(data, "restored", 0),
+                            "via", Json.getString(data, "via", ""), "message", Json.getString(data, "message", "")), data);
+            case "journal_result" -> pluginEvent(b, "plugin_journal", Levels.INFO, "event.plugin.journal",
+                    Map.of("bot", b.id, "breaks", Json.getInt(data, "breaks", 0), "places", Json.getInt(data, "places", 0)),
+                    data);
+            default -> {
+                // welcome / reject / future types: stored only
+            }
+        }
+        broadcastBot(b);
+    }
+
+    private void pluginEvent(BotState b, String kind, String level, String key, Map<String, ?> args, JsonObject data) {
+        String message = i18n.t(config.get().general().language(), key, args);
+        events.add(kind, level, ManagerEvent.SOURCE_PLUGIN, b.id, message, key, Json.toObject(args), data);
     }
 
     private void onLog(BotState b, LogLine line) {

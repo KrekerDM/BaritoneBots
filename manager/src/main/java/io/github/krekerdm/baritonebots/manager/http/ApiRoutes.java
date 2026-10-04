@@ -34,7 +34,7 @@ import java.util.concurrent.TimeoutException;
 
 /**
  * Every endpoint of SPEC §6. Loop state is only touched inside {@link #loop(Callable)}; bot queries wait for the
- * reply on the HTTP thread. {@code /api/projects*} answers 501 until the planner exists (phase 2).
+ * reply on the HTTP thread.
  */
 final class ApiRoutes {
     private static final long QUERY_TIMEOUT_MS = 9_000;
@@ -95,7 +95,8 @@ final class ApiRoutes {
             int limit = q.queryInt("limit", 200, 1, 5000);
             String bot = q.query("bot", null);
             String level = q.query("level", null);
-            return loop(() -> Json.obj("events", Json.arrOf(m.events.query(limit, bot, level))));
+            String project = q.query("project", null);
+            return loop(() -> Json.obj("events", Json.arrOf(m.events.query(limit, bot, level, project))));
         });
     }
 
@@ -263,6 +264,7 @@ final class ApiRoutes {
             JsonObject args = Json.getObj(body, "args");
             return query(q.param("id"), kind, args == null ? new JsonObject() : args);
         });
+        r.get("/api/bots/{id}/plugin", q -> loop(() -> Json.obj("plugin", Json.toTree(m.bots.require(q.param("id")).plugin))));
         r.post("/api/bots/{id}/plugin", q -> {
             JsonObject payload = Json.getObj(q.json(), "payload");
             if (payload == null) {
@@ -506,14 +508,32 @@ final class ApiRoutes {
     }
 
     private void projects(Router r) {
-        Router.Handler notImplemented = q -> {
-            throw new ApiException(501, "not_implemented", "projects and the automatic planner are phase 2");
-        };
-        for (String method : List.of("GET", "POST", "PUT", "DELETE")) {
-            r.add(method, "/api/projects", notImplemented);
-            r.add(method, "/api/projects/{id}", notImplemented);
-            r.add(method, "/api/projects/{id}/{action}", notImplemented);
-        }
+        r.get("/api/projects", q -> loop(() -> Json.obj("projects", Json.arrOf(m.projects.list()))));
+        r.post("/api/projects", q -> {
+            JsonObject body = q.json();
+            return loop(() -> new HttpApi.Status(201, m.projects.create(body)));
+        });
+        r.get("/api/projects/{id}", q -> loop(() -> m.projects.view(m.projects.require(q.param("id")), true)));
+        r.put("/api/projects/{id}", q -> {
+            JsonObject body = q.json();
+            return loop(() -> m.projects.replace(q.param("id"), body));
+        });
+        r.delete("/api/projects/{id}", q -> loop(() -> {
+            m.projects.delete(q.param("id"));
+            return null;
+        }));
+        r.post("/api/projects/{id}/{action}", q -> loop(() -> m.projects.action(q.param("id"), q.param("action"))));
+
+        // extras (not in SPEC §6): planner overview and game data lookups
+        r.get("/api/planner", q -> loop(m.planner::view));
+        r.get("/api/gamedata", q -> loop(m.gameData::view));
+        r.get("/api/gamedata/item/{id}", q -> {
+            var data = m.gameData.current();
+            if (data == null) {
+                throw ApiException.conflict("not_loaded", "game data is not loaded (no client jar yet)");
+            }
+            return data.describe(q.param("id"));
+        });
     }
 
     /** Keeps the id rules in one place for callers that build ids. */

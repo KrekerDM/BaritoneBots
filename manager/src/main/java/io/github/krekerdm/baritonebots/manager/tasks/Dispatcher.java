@@ -54,6 +54,23 @@ public final class Dispatcher {
     private final Path queuesFile;
     private final Map<String, Run> runs = new LinkedHashMap<>();
     private boolean saveScheduled;
+    private Hooks hooks;
+
+    /**
+     * Observer for the planner (called on the loop, never re-entrantly dispatching: implementations post work).
+     * {@code onFinished} sees every finished entry once; {@code requeued} = the dispatcher queued it again
+     * (died / disconnected / inventory_full retry), so the work is not over yet.
+     */
+    public interface Hooks {
+        void onQueued(BotState b, List<QueueEntry> added);
+
+        void onFinished(BotState b, QueueEntry e, boolean ok, String reason, String message, JsonObject data,
+                        boolean requeued);
+    }
+
+    public void setHooks(Hooks hooks) {
+        this.hooks = hooks;
+    }
 
     /** One scenario run on one bot. */
     private static final class Run {
@@ -111,6 +128,9 @@ public final class Dispatcher {
         QueueEntry running = b.queue.add(entries, mode);
         if (running != null) {
             abortRunning(b, running);
+        }
+        if (hooks != null) {
+            hooks.onQueued(b, entries);
         }
         changed(b);
         dispatch(b);
@@ -519,7 +539,16 @@ public final class Dispatcher {
 
     /** Bookkeeping for a finished entry; never dispatches (callers do). */
     private void outcome(BotState b, QueueEntry e, boolean ok, String reason, String message, JsonObject data) {
+        boolean requeued = outcomeInner(b, e, ok, reason, message, data);
+        if (hooks != null) {
+            hooks.onFinished(b, e, ok, reason, message, data, requeued);
+        }
+    }
+
+    /** Returns true when the entry was queued again (retry). */
+    private boolean outcomeInner(BotState b, QueueEntry e, boolean ok, String reason, String message, JsonObject data) {
         Run run = runOf(e);
+        boolean requeued = false;
         if (ok) {
             m.event("task_done", Levels.INFO, b.id, "event.task.done", Map.of("bot", b.id, "task", e.type(),
                     "message", message == null ? "" : message), data);
@@ -540,6 +569,7 @@ public final class Dispatcher {
                 case Reasons.DISCONNECTED -> retry(b, e);
                 default -> false;
             };
+            requeued = handled && !Reasons.CANCELLED.equals(r);
             if (!handled) {
                 m.event("task_failed", Levels.WARN, b.id, "event.task.failed", Map.of("bot", b.id, "task", e.type(),
                         "reason", r, "message", message == null ? "" : message), data);
@@ -552,6 +582,7 @@ public final class Dispatcher {
             iterationDone(b, run);
         }
         changed(b);
+        return requeued;
     }
 
     private boolean depositAndRetry(BotState b, QueueEntry e, Run run) {
@@ -704,7 +735,10 @@ public final class Dispatcher {
         }
     }
 
-    /** Restores queued entries; scenario entries are dropped because runs are not persisted. */
+    /**
+     * Restores queued entries; scenario and project entries are dropped because runs and planner assignments are
+     * not persisted (running projects re-plan after the restart).
+     */
     public void loadQueues() {
         try {
             JsonElement root = AtomicFiles.readJson(queuesFile);
@@ -721,7 +755,8 @@ public final class Dispatcher {
                     try {
                         QueueEntry q = Json.fromJson(el, QueueEntry.class);
                         if (q != null && q.type() != null && m.catalog.isKnown(q.type()) && (q.origin() == null
-                                || !q.origin().startsWith(TaskSpec.ORIGIN_SCENARIO_PREFIX))) {
+                                || !q.origin().startsWith(TaskSpec.ORIGIN_SCENARIO_PREFIX)
+                                && !q.origin().startsWith(TaskSpec.ORIGIN_PROJECT_PREFIX))) {
                             entries.add(q);
                         }
                     } catch (RuntimeException ignored) {

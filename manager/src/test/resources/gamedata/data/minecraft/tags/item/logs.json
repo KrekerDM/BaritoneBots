@@ -1,0 +1,9 @@
+{
+ "values": [
+  "#minecraft:oak_logs",
+  {
+   "id": "minecraft:spruce_log",
+   "required": false
+  }
+ ]
+}

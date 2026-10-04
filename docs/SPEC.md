@@ -229,9 +229,10 @@ general  { language:"ru|en", ownerPlayer:str, panel{bind:"127.0.0.1", port:8765,
 runtime  { minecraftVersion:"26.2", fabricLoader:"0.19.5", headlessmcVersion:"2.10.0", headlessmcUrl, javaPath:str? (null = the manager's own java if ≥ 25, else HeadlessMC auto-download),
            mods:[{id, name, url, sha512?, enabled}],   // fabric-api, baritone-api, ferritecore; our mod is always added from the manager jar
            startStaggerSec:int=20, priority:"normal|below_normal|idle", restart{enabled, delaySec, maxPer10Min},
-           memoryPreset:"eco|normal|performance|custom", memoryMb:int, jvmArgs:str, gcThreads:int, maxHeavyTasks:int (concurrent mine/explore/build, 0 = unlimited) }
+           memoryPreset:"eco|normal|performance|custom", memoryMb:int, jvmArgs:str, gcThreads:int, maxHeavyTasks:int (concurrent mine/explore/build, 0 = unlimited),
+           gameDataPath:str? (client jar or folder with data/ for game data; null = the game jar under runtime/mc/versions) }
 servers  [ { id, name, address, login:{mode, loginCommand, registerCommand, loginPatterns, registerPatterns, successPatterns, failurePatterns, delayMs, joinCommands},
-             companion:{enabled, token}, protection:{enabled, noBreak, zones}, baritone:{overrides} } ]
+             companion:{enabled, token}, protection:{enabled, noBreak, zones}, baritone:{overrides}, antiXray:"none|hide|fake" } ]
 bots     [ { id, username, account:{type:"offline|microsoft"}, serverId, enabled, autoStart, memoryMb?, jvmArgs?, homeWaypoint?,
              roles:[role] (empty = any), behaviour:{overrides}, baritone:{overrides} } ]
 behaviour{ defaults for BotConfig.behaviour }
@@ -265,7 +266,7 @@ Planner tick (`planner.tickSec`): every running project emits work items `{kind,
 4. Deficit per item = remaining BOM − supply stock − builders' inventories − in transit. Each deficit resolves to: haul from storage → mine (blocks whose loot drops the item, from game data) → craft (recipe from game data, ingredients recurse) → smelt → else `manual` (shown in the panel with the count needed; honest mode only, nothing is spawned).
 5. Gather/craft/smelt/haul work items deliver into the project's `supply` containers.
 
-Game data: parsed from the client jar `runtime/mc/versions/<mc>/<mc>.jar` (`data/minecraft/recipe/*.json`, `data/minecraft/tags/item/**`, `data/minecraft/loot_table/blocks/*.json`), so recipes and drops follow the actual game version. Without the jar, the planner only knows "item id = mineable block id".
+Game data: parsed from the client jar `runtime/mc/versions/<mc>/<mc>.jar` (HeadlessMC's Fabric install keeps it as `versions/fabric-loader-<loader>-<mc>/fabric-loader-<loader>-<mc>.jar`; `runtime.gameDataPath` overrides) (`data/minecraft/recipe/*.json`, `data/minecraft/tags/item/**`, `data/minecraft/loot_table/blocks/*.json`), so recipes and drops follow the actual game version. Without the jar, the planner only knows "item id = mineable block id".
 
 ### 5.7a Autopilot (auto-supply, auto-sort, idle work)
 The user wants bots to fetch what they need and keep storage sorted without being told. Settings section `autopilot { supply:bool, sort:bool, idleWork:bool, foodMin:int, blocksMin:int, toolMinDurability:float, categories:[{name, globs}] }`, per-bot override `bots[].autopilot`.

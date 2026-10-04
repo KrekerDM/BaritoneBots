@@ -107,9 +107,15 @@ public final class EventLog {
      * @param minLevel only events at or above this level when not null
      */
     public List<ManagerEvent> query(int limit, String botId, String minLevel) {
+        return query(limit, botId, minLevel, null);
+    }
+
+    /** As above; {@code projectId} keeps only events whose {@code data.projectId} matches. */
+    public List<ManagerEvent> query(int limit, String botId, String minLevel, String projectId) {
         int min = minLevel == null ? 0 : ManagerEvent.rank(minLevel);
         return tail.tail(Math.max(0, limit), e -> (botId == null || botId.equalsIgnoreCase(e.botId()))
-                && ManagerEvent.rank(e.level()) >= min);
+                && ManagerEvent.rank(e.level()) >= min
+                && (projectId == null || e.data() != null && projectId.equals(Json.getString(e.data(), "projectId", null))));
     }
 
     private void write(ManagerEvent e) {

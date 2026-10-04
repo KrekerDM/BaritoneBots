@@ -388,7 +388,7 @@
   "settings.status.idleIntervalTicks.desc": "How often an idle bot reports its status.",
 
   "settings.planner.tickSec": "Planner interval",
-  "settings.planner.tickSec.desc": "How often projects assign work (projects are a later feature).",
+  "settings.planner.tickSec.desc": "How often the planner assigns project work to idle bots.",
   "settings.planner.roleSwitchCooldownSec": "Role switch cooldown",
   "settings.planner.roleSwitchCooldownSec.desc": "A bot keeps its role at least this long.",
   "settings.planner.maxBuildersPerSector": "Builders per sector",
@@ -507,5 +507,25 @@
   "error.field.missing_source": "Set a URL or a Modrinth project",
   "error.field.immutable": "Cannot be changed",
   "error.field.unknown_type": "Unknown task type",
-  "error.field.unsupported": "Not supported yet"
+  "error.field.unsupported": "Not supported yet",
+
+  "settings.runtime.gameDataPath": "Game data jar",
+  "settings.runtime.gameDataPath.desc": "Client jar (or a folder with data/) to read recipes, tags and block drops from. Empty = the game jar under runtime/mc/versions.",
+  "settings.servers.antiXray": "Anti-xray",
+  "settings.servers.antiXray.desc": "How the server hides ores (Paper anti-xray). With hide or fake, bots mine ores the legit way.",
+  "settings.servers.antiXray.option.none": "None",
+  "settings.servers.antiXray.option.hide": "Hide ores (engine-mode 1)",
+  "settings.servers.antiXray.option.fake": "Fake ores (engine-mode 2)",
+  "event.project.started": "Project \"{name}\" started",
+  "event.project.paused": "Project \"{name}\" paused",
+  "event.project.resumed": "Project \"{name}\" resumed",
+  "event.project.stopped": "Project \"{name}\" stopped",
+  "event.project.done": "Project \"{name}\" finished",
+  "event.project.blocked": "Project \"{name}\" is blocked: {reason}",
+  "event.project.failed": "Project \"{name}\" failed: {reason}",
+  "event.plugin.notice": "{bot}: server plugin says: {message}",
+  "event.plugin.rollback": "{bot}: rollback {ok}, {restored} blocks restored ({via}) {message}",
+  "event.plugin.journal": "{bot}: journal: {breaks} blocks broken, {places} placed",
+  "error.bad_status": "Not possible in the project's current state.",
+  "error.not_loaded": "Game data is not loaded yet."
 }

@@ -1,0 +1,12 @@
+{
+ "type": "minecraft:crafting_shaped",
+ "key": {
+  "#": "#minecraft:no_such_tag"
+ },
+ "pattern": [
+  "#"
+ ],
+ "result": {
+  "id": "minecraft:nothing"
+ }
+}

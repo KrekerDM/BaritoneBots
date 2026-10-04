@@ -388,7 +388,7 @@
   "settings.status.idleIntervalTicks.desc": "Как часто свободный бот сообщает состояние.",
 
   "settings.planner.tickSec": "Интервал планировщика",
-  "settings.planner.tickSec.desc": "Как часто проекты раздают работу (проекты появятся позже).",
+  "settings.planner.tickSec.desc": "Как часто планировщик раздаёт работу проектов свободным ботам.",
   "settings.planner.roleSwitchCooldownSec": "Задержка смены роли",
   "settings.planner.roleSwitchCooldownSec.desc": "Бот сохраняет роль минимум столько времени.",
   "settings.planner.maxBuildersPerSector": "Строителей на сектор",
@@ -507,5 +507,25 @@
   "error.field.missing_source": "Укажите ссылку или проект Modrinth",
   "error.field.immutable": "Нельзя изменить",
   "error.field.unknown_type": "Неизвестный тип задачи",
-  "error.field.unsupported": "Пока не поддерживается"
+  "error.field.unsupported": "Пока не поддерживается",
+
+  "settings.runtime.gameDataPath": "Jar с игровыми данными",
+  "settings.runtime.gameDataPath.desc": "Клиентский jar (или папка с data/), из которого читаются рецепты, теги и дроп блоков. Пусто — jar игры в runtime/mc/versions.",
+  "settings.servers.antiXray": "Анти-иксрей",
+  "settings.servers.antiXray.desc": "Как сервер прячет руды (анти-иксрей Paper). При «скрывает» и «подделывает» боты копают руду честно.",
+  "settings.servers.antiXray.option.none": "Нет",
+  "settings.servers.antiXray.option.hide": "Скрывает руды (engine-mode 1)",
+  "settings.servers.antiXray.option.fake": "Подделывает руды (engine-mode 2)",
+  "event.project.started": "Проект «{name}» запущен",
+  "event.project.paused": "Проект «{name}» приостановлен",
+  "event.project.resumed": "Проект «{name}» продолжен",
+  "event.project.stopped": "Проект «{name}» остановлен",
+  "event.project.done": "Проект «{name}» завершён",
+  "event.project.blocked": "Проект «{name}» застрял: {reason}",
+  "event.project.failed": "Проект «{name}» не удался: {reason}",
+  "event.plugin.notice": "{bot}: сообщение плагина сервера: {message}",
+  "event.plugin.rollback": "{bot}: откат {ok}, восстановлено блоков: {restored} ({via}) {message}",
+  "event.plugin.journal": "{bot}: журнал: сломано {breaks}, поставлено {places}",
+  "error.bad_status": "Невозможно в текущем состоянии проекта.",
+  "error.not_loaded": "Игровые данные ещё не загружены."
 }
