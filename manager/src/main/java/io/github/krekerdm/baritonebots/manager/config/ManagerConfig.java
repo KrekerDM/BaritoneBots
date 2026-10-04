@@ -209,7 +209,8 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
                                int discoveryIntervalSec, int inspectMaxAgeMin, int maxInspectPerTick, int homeRadius,
                                boolean useFound, int foodMin, int blocksMin, double toolMinDurability, int stuckSec,
                                int idleHomeSec, List<String> throwaway, List<String> smeltInputs,
-                               List<Category> categories, java.util.Map<String, String> signWords, AutoTrash autoTrash) {
+                               List<Category> categories, java.util.Map<String, String> signWords, AutoTrash autoTrash,
+                               int holdAfterOwnerSec, int inspectMaxDistance) {
         /** Keys a bot may override in {@code bots[].autopilot}. */
         public static final List<String> BOT_KEYS = List.of("supply", "sort", "idleWork", "discovery", "foodMin",
                 "blocksMin", "toolMinDurability", "stuckSec");
@@ -244,7 +245,7 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
                     Math.max(0, Json.getInt(o, "foodMin", foodMin)), Math.max(0, Json.getInt(o, "blocksMin", blocksMin)),
                     Math.max(0, Math.min(1, Json.getDouble(o, "toolMinDurability", toolMinDurability))),
                     Math.max(0, Json.getInt(o, "stuckSec", stuckSec)), idleHomeSec, throwaway, smeltInputs, categories,
-                    signWords, autoTrash);
+                    signWords, autoTrash, holdAfterOwnerSec, inspectMaxDistance);
         }
     }
 

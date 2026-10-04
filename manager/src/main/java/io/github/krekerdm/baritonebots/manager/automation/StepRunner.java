@@ -106,13 +106,18 @@ public final class StepRunner {
      * {@code serverId} (any server when null); {@code any} / {@code all} only pick online, living bots.
      */
     public List<BotState> pick(Target t, String serverId, BotState trigger) {
+        return pick(t, serverId, trigger, null);
+    }
+
+    /** {@link #pick(Target, String, BotState)} without the bots {@code skip} matches (null = none). */
+    public List<BotState> pick(Target t, String serverId, BotState trigger, java.util.function.Predicate<BotState> skip) {
         if (trigger != null) {
             return t.includes(trigger.id) && onServer(trigger, serverId) ? List.of(trigger) : List.of();
         }
         List<BotState> out = new ArrayList<>();
         long now = System.currentTimeMillis();
         for (BotState b : m.bots.all()) {
-            if (!b.def.enabled() || !onServer(b, serverId) || !t.includes(b.id)) {
+            if (!b.def.enabled() || !onServer(b, serverId) || !t.includes(b.id) || skip != null && skip.test(b)) {
                 continue;
             }
             if ("list".equals(t.mode()) || b.online() && !b.dead) {

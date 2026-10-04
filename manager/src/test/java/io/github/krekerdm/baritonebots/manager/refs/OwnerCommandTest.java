@@ -67,4 +67,17 @@ class OwnerCommandTest {
         assertEquals("trash_chest", OwnerCommands.trashTarget("chest"));
         assertEquals("drop", OwnerCommands.trashTarget(null));
     }
+
+    @Test
+    void botWithTheOwnersNameIsNoTarget() {
+        var owner = new io.github.krekerdm.baritonebots.manager.bots.BotState(new io.github.krekerdm.baritonebots
+                .manager.config.ManagerConfig.BotDef("bot2", "Owner", null, "main", true, false, null, null, null,
+                null, null, null, null));
+        var other = new io.github.krekerdm.baritonebots.manager.bots.BotState(new io.github.krekerdm.baritonebots
+                .manager.config.ManagerConfig.BotDef("bot1", "Bot1", null, "main", true, false, null, null, null,
+                null, null, null, null));
+        assertTrue(OwnerCommands.isOwnerBot(owner, "owner"), "case-insensitive");
+        assertFalse(OwnerCommands.isOwnerBot(other, "Owner"));
+        assertFalse(OwnerCommands.isOwnerBot(owner, null), "no owner configured");
+    }
 }

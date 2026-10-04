@@ -44,7 +44,8 @@ class NoCoordinatesFlowTest {
     private Bot bot;
 
     private final class Bot implements AutoCloseable {
-        final String id = "bot1";
+        final String id;
+        final String username;
         final Socket socket;
         final LineCodec in;
         final OutputStream out;
@@ -56,11 +57,17 @@ class NoCoordinatesFlowTest {
         volatile JsonObject statusItems = new JsonObject();
 
         Bot() throws IOException {
+            this("bot1", "Bot1");
+        }
+
+        Bot(String id, String username) throws IOException {
+            this.id = id;
+            this.username = username;
             socket = new Socket("127.0.0.1", m.link.port());
             in = new LineCodec(socket.getInputStream(), Protocol.MAX_LINE_BYTES);
             out = socket.getOutputStream();
             send(Envelope.of(MessageTypes.HELLO, Json.obj("protocol", 1, "botId", id, "secret", m.secrets.linkSecret(),
-                    "username", "Bot1", "modVersion", "0.1.0", "mcVersion", "26.2", "baritoneVersion", "1.19.0", "pid", 1)));
+                    "username", username, "modVersion", "0.1.0", "mcVersion", "26.2", "baritoneVersion", "1.19.0", "pid", 1)));
             status();
             Thread reader = new Thread(() -> {
                 try {
@@ -81,7 +88,7 @@ class NoCoordinatesFlowTest {
         }
 
         void status() throws IOException {
-            send(Envelope.of(MessageTypes.STATUS, Json.obj("botId", id, "username", "Bot1", "state", "online",
+            send(Envelope.of(MessageTypes.STATUS, Json.obj("botId", id, "username", username, "state", "online",
                     "dim", "minecraft:overworld", "pos", Json.obj("x", 10.5, "y", 64, "z", 10.5), "yaw", 0,
                     "freeSlots", 1, "items", statusItems, "armor", Json.arr(), "time", System.currentTimeMillis())));
         }
@@ -261,6 +268,36 @@ class NoCoordinatesFlowTest {
         until(() -> bot.types().contains("goto"), "come");
         assertEquals(100, bot.last("goto").get("x").getAsInt());
         assertEquals(-20, bot.last("goto").get("z").getAsInt());
+    }
+
+    @Test
+    void ownerNamedBotNeverObeysAndComeHoldsTheAutopilot() throws Exception {
+        m.loop.awaitRun(() -> m.config.addItem("bots", Json.obj("id", "bot2", "username", "Owner", "serverId", "main")));
+        try (Bot self = new Bot("bot2", "Owner")) {
+            until(() -> m.loop.await(() -> m.bots.require("bot2").online()), "owner-named bot online");
+            JsonObject come = Json.obj("pos", Json.obj("x", 100, "y", 70, "z", -20), "dim", "minecraft:overworld",
+                    "yaw", 90.0, "pitch", 30.0, "player", "Owner", "text", "ко мне", "via", "chat");
+            self.event("owner_command", come);
+            until(() -> bot.types().contains("goto"), "bot1 comes");
+            until(this::idle, "bot1 arrived");
+
+            JsonObject named = come.deepCopy();
+            named.addProperty("text", "trash @Owner");
+            self.event("owner_command", named);
+            Thread.sleep(300);
+            assertTrue(self.tasks.isEmpty(), "the owner's own account never obeys: " + self.types());
+            assertEquals(List.of("goto"), bot.types());
+
+            long now = System.currentTimeMillis();
+            assertTrue(m.loop.await(() -> m.autopilot.held(m.bots.require("bot1"), now)), "attention hold after come");
+            assertFalse(m.loop.await(() -> m.autopilot.held(m.bots.require("bot2"), now)));
+
+            JsonObject stop = come.deepCopy();
+            stop.addProperty("text", "стоп");
+            self.event("owner_command", stop);
+            until(() -> !m.loop.await(() -> m.autopilot.held(m.bots.require("bot1"), System.currentTimeMillis())),
+                    "stop releases the hold");
+        }
     }
 
     @Test

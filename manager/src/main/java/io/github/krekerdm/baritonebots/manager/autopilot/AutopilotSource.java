@@ -58,6 +58,9 @@ final class AutopilotSource implements WorkSource {
     static final int INSPECT_AREA = 16;
     static final long SKIP_INSPECT_MS = 3_600_000;
     static final long EVENT_EVERY_MS = 10 * 60_000;
+    /** Roles that make a container worth an idle inspection wherever it is (besides {@code sorted:*}). */
+    static final List<String> INSPECT_ROLES = List.of("storage", "kit", "supply", "inbox", "trash", "fuel", "furnace",
+            "crafting");
     /** A bot this close to its home waypoint is home. */
     static final double AT_HOME = 4;
 
@@ -148,7 +151,7 @@ final class AutopilotSource implements WorkSource {
             furnaceItems(doc, out, now);
         }
         if (discovery) {
-            inspectItems(doc, out, now);
+            inspectItems(doc, bots, out, now);
         }
         if (idle) {
             homeItems(doc, bots, out, now);
@@ -299,17 +302,52 @@ final class AutopilotSource implements WorkSource {
         return b.endsWith("smoker") ? GameData.SMOKING : GameData.SMELTING;
     }
 
-    /** Unknown or stale containers, unknown first, batched per area, at most {@code maxInspectPerTick} items. */
-    private void inspectItems(WorldDoc doc, List<WorkItem> out, long now) {
+    /**
+     * May idle inspection open this container? Within {@code homeRadius} of a home, or with a usable role; a
+     * {@code found} one outside home only with {@code useFound}. Crafting tables hold nothing to look at.
+     */
+    static boolean inspectable(WorldDoc.Container c, boolean inHome, boolean useFound) {
+        if (Ids.path(c.block() == null ? "" : c.block()).equals("crafting_table")) {
+            return false;
+        }
+        if (c.sortedCategory() != null || INSPECT_ROLES.stream().anyMatch(c::hasRole)) {
+            return true;
+        }
+        return inHome || useFound && c.hasRole("found");
+    }
+
+    /** Is {@code target} within {@code max} blocks of a bot at {@code at} ({@code max <= 0} = no limit)? */
+    static boolean inReach(Pos at, String atDim, String dim, Pos target, int max) {
+        if (max <= 0) {
+            return true;
+        }
+        return at != null && target != null && Dims.normalize(atDim).equals(Dims.normalize(dim))
+                && at.distance(target) <= max;
+    }
+
+    private static String dimOf(BotState b) {
+        return b.status == null || b.status.dim() == null ? Dims.OVERWORLD : Dims.normalize(b.status.dim());
+    }
+
+    /**
+     * Unknown or stale containers, unknown first, batched per area, at most {@code maxInspectPerTick} items; only
+     * {@link #inspectable} ones within {@code inspectMaxDistance} of a bot that may inspect now.
+     */
+    private void inspectItems(WorldDoc doc, List<BotState> bots, List<WorkItem> out, long now) {
         ManagerConfig.AutopilotCfg g = m.config.get().autopilot();
         if (g.maxInspectPerTick() <= 0) {
             return;
         }
         long maxAge = g.inspectMaxAgeMin() * 60_000L;
         skipInspect.values().removeIf(t -> t < now);
+        List<BotState> seekers = bots.stream().filter(b -> b.online() && ap.cfg(b).discovery() && !ap.held(b, now))
+                .toList();
         List<WorldDoc.Container> due = new ArrayList<>();
         for (WorldDoc.Container c : doc.containers) {
-            if (skipInspect.containsKey(c.dim() + ":" + c.pos()) || !(ap.isSource(c, g.useFound()) || c.hasRole("furnace"))) {
+            if (skipInspect.containsKey(c.dim() + ":" + c.pos())
+                    || !inspectable(c, ap.inHome(serverId, c.dim(), c.pos()), g.useFound())
+                    || seekers.stream().noneMatch(b -> inReach(Planner.posOf(b), dimOf(b), c.dim(), c.pos(),
+                    g.inspectMaxDistance()))) {
                 continue;
             }
             WorldDoc.Snapshot s = c.snapshot();
@@ -368,12 +406,16 @@ final class AutopilotSource implements WorkSource {
     public boolean eligible(BotState b, WorkItem w) {
         ManagerConfig.AutopilotCfg c = ap.cfg(b);
         List<String> roles = b.def.roles();
+        if (!REFILL.equals(w.kind()) && ap.held(b, System.currentTimeMillis())) {
+            return false; // attention hold after an owner come / follow
+        }
         return switch (w.kind()) {
             case REFILL -> b.id.equals(Json.getString(w.data(), "bot", ""));
             case HOME -> c.idleWork() && b.id.equals(Json.getString(w.data(), "bot", ""));
             case SORT -> c.sort() && (roles.isEmpty() || roles.contains("sorter") || roles.contains("hauler"));
             case COLLECT, REFUEL -> c.idleWork() && (roles.isEmpty() || roles.contains("smelter") || roles.contains("hauler"));
-            case INSPECT -> c.discovery();
+            case INSPECT -> c.discovery()
+                    && inReach(Planner.posOf(b), dimOf(b), w.dim(), w.location(), c.inspectMaxDistance());
             default -> false;
         };
     }

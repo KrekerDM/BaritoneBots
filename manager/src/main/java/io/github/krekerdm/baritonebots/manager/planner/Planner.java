@@ -444,8 +444,12 @@ public final class Planner implements io.github.krekerdm.baritonebots.manager.ta
 
     @Override
     public void onQueued(BotState b, List<QueueEntry> added) {
-        boolean manual = added.stream().anyMatch(e -> !isPlannerOrigin(e.origin()) && !isSoftOrigin(e.origin())
-                && !QueueEntry.ORIGIN_RECOVERY.equals(e.origin()));
+        List<QueueEntry> manualEntries = added.stream().filter(e -> !isPlannerOrigin(e.origin())
+                && !isSoftOrigin(e.origin()) && !QueueEntry.ORIGIN_RECOVERY.equals(e.origin())).toList();
+        boolean manual = !manualEntries.isEmpty();
+        if (manual && m.autopilot != null) {
+            m.autopilot.onManualQueued(b, manualEntries); // attention hold after owner come / follow
+        }
         if (manual && assignments.containsKey(b.id)) {
             m.loop.post(() -> {
                 Assignment a = assignments.get(b.id);

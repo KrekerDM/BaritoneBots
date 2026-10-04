@@ -18,6 +18,8 @@ import io.github.krekerdm.baritonebots.manager.config.ManagerConfig;
 import io.github.krekerdm.baritonebots.manager.gamedata.GameData;
 import io.github.krekerdm.baritonebots.manager.planner.Planner;
 import io.github.krekerdm.baritonebots.manager.planner.ProductionWork;
+import io.github.krekerdm.baritonebots.manager.refs.OwnerCommands;
+import io.github.krekerdm.baritonebots.manager.refs.Refs;
 import io.github.krekerdm.baritonebots.manager.tasks.KitPlanner;
 import io.github.krekerdm.baritonebots.manager.tasks.QueueEntry;
 import io.github.krekerdm.baritonebots.manager.world.WorldDoc;
@@ -58,6 +60,7 @@ public final class Autopilot {
     private final Map<String, OrdersSource> orders = new LinkedHashMap<>();
     private final Map<String, Scan> scans = new HashMap<>();
     private final Map<String, Long> throttle = new HashMap<>();
+    private final AttentionHold hold = new AttentionHold();
     private Categories categories;
     private List<ManagerConfig.Category> catDefs;
     private GameData catData;
@@ -209,6 +212,34 @@ public final class Autopilot {
         supply.forget(botId);
         stuck.forget(botId);
         scans.remove(botId);
+        hold.release(botId);
+    }
+
+    // ------------------------------------------------------------------ attention hold
+
+    /** Manual entries were queued for the bot (planner hook): start or release its attention hold. */
+    public void onManualQueued(BotState b, List<QueueEntry> manual) {
+        long now = System.currentTimeMillis();
+        int sec = m.config.get().autopilot().holdAfterOwnerSec();
+        String owner = m.config.get().general().ownerOrNull();
+        long end = 0;
+        for (QueueEntry e : manual) {
+            Set<String> kinds = e.args() == null ? Set.of() : Refs.kinds(e.args(), m.catalog.refArgs(e.type()));
+            end = Math.max(end, AttentionHold.untilFor(e.type(), e.origin(), e.args(), kinds, owner,
+                    OwnerCommands.ORIGIN, now, sec));
+        }
+        hold.set(b.id, end);
+    }
+
+    /** The owner's {@code stop}: the bot is free for autopilot work again. */
+    public void releaseHold(BotState b) {
+        hold.release(b.id);
+    }
+
+    /** Does the attention hold keep autopilot idle work and inspections away from this bot? */
+    public boolean held(BotState b, long now) {
+        boolean following = b.queue.anyMatch(e -> TaskTypes.FOLLOW.equals(e.type()));
+        return hold.held(b.id, following, now, m.config.get().autopilot().holdAfterOwnerSec());
     }
 
     // ------------------------------------------------------------------ status, events
@@ -578,7 +609,8 @@ public final class Autopilot {
             }
         }
         return Json.obj("settings", Json.toTree(m.config.get().autopilot()), "servers", srcs, "scans", sc,
-                "supply", supply.view(), "stillSec", stuckView, "goals", m.goals.view().get("goals"),
+                "supply", supply.view(), "stillSec", stuckView, "heldSec", Json.toTree(hold.view(now)),
+                "goals", m.goals.view().get("goals"),
                 "categories", Json.arrOf(categories().names()));
     }
 

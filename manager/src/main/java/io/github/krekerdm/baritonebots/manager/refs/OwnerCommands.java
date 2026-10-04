@@ -41,7 +41,7 @@ import java.util.stream.Stream;
  * that heard the command, at most one per second per server, in {@code general.language}. A whispered command
  * addresses the bot it was whispered to; public ones go to every bot ({@code come}, {@code follow}, {@code stop},
  * {@code trash}) or to the best free bot ({@code progress}, {@code obtain}); {@code @name} / {@code @all} /
- * {@code @any} override that. Queued work has origin {@value #ORIGIN}: manual, so it beats project work.
+ * {@code @any} override that; a bot logged in with the owner's name is never a target. Queued work has origin {@value #ORIGIN}: manual, so it beats project work.
  */
 public final class OwnerCommands {
     public static final String ORIGIN = "owner";
@@ -296,6 +296,7 @@ public final class OwnerCommands {
         List<BotState> bots = targets(b, sid, cmd, whisper, true);
         for (BotState t : bots) {
             m.dispatcher.clear(t);
+            m.autopilot.releaseHold(t);
         }
         reply(b, bots.isEmpty() ? "noBots" : "stop", Map.of("bots", names(bots)));
     }
@@ -321,17 +322,23 @@ public final class OwnerCommands {
         if (t == null) {
             t = whisper ? heard.id : allByDefault ? OwnerCommand.TARGET_ALL : OwnerCommand.TARGET_ANY;
         }
+        String owner = m.config.get().general().ownerOrNull();
         StepRunner runner = m.automation.runner();
         if (OwnerCommand.TARGET_ALL.equals(t) || OwnerCommand.TARGET_ANY.equals(t)) {
-            return runner.pick(StepRunner.Target.of(Json.toTree(t)), sid, null);
+            return runner.pick(StepRunner.Target.of(Json.toTree(t)), sid, null, x -> isOwnerBot(x, owner));
         }
         for (BotState x : m.bots.all()) {
-            if (sid.equalsIgnoreCase(String.valueOf(x.def.serverId()))
+            if (sid.equalsIgnoreCase(String.valueOf(x.def.serverId())) && !isOwnerBot(x, owner)
                     && (x.id.equalsIgnoreCase(t) || t.equalsIgnoreCase(x.def.username()))) {
                 return List.of(x);
             }
         }
         return List.of();
+    }
+
+    /** A bot logged in with the owner's own name never executes the owner's commands (it would obey itself). */
+    static boolean isOwnerBot(BotState b, String owner) {
+        return owner != null && b.def.username() != null && b.def.username().equalsIgnoreCase(owner);
     }
 
     // ------------------------------------------------------------------ projects

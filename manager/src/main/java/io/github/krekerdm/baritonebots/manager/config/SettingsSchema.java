@@ -314,6 +314,7 @@ public final class SettingsSchema {
         l.add(num("autopilot.discoveryIntervalSec", INT, 60, 10, 3600, "s"));
         l.add(num("autopilot.inspectMaxAgeMin", INT, 120, 0, 10080, "min"));
         l.add(num("autopilot.maxInspectPerTick", INT, 2, 0, 16, null));
+        l.add(num("autopilot.inspectMaxDistance", INT, 48, 0, 1024, "blocks"));
         l.add(num("autopilot.homeRadius", INT, 24, 0, 256, "blocks"));
         l.add(f("autopilot.useFound", BOOL, false));
         l.add(num("autopilot.foodMin", INT, 8, 0, 256, "items"));
@@ -321,6 +322,7 @@ public final class SettingsSchema {
         l.add(num("autopilot.toolMinDurability", DOUBLE, 0.1, 0, 1, null));
         l.add(num("autopilot.stuckSec", INT, 60, 0, 3600, "s"));
         l.add(num("autopilot.idleHomeSec", INT, 60, 0, 86400, "s"));
+        l.add(num("autopilot.holdAfterOwnerSec", INT, 300, 0, 86400, "s"));
         l.add(f("autopilot.throwaway", STRING_LIST, List.of("minecraft:cobblestone", "minecraft:cobbled_deepslate",
                 "minecraft:dirt", "minecraft:netherrack", "minecraft:stone")));
         l.add(f("autopilot.smeltInputs", STRING_LIST, List.of("minecraft:raw_iron", "minecraft:raw_gold",
