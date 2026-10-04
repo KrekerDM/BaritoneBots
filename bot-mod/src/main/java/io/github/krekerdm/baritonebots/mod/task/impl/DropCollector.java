@@ -26,8 +26,7 @@ final class DropCollector {
     private static final int TARGET_TIMEOUT_TICKS = 400;
     private static final int LINGER_TICKS = 40;
 
-    private final BlockPos center;
-    private final int radius;
+    private final AABB area;
     private final List<String> globs;
     private final Set<Integer> skipped = new HashSet<>();
     private final PathStep path = new PathStep();
@@ -37,8 +36,12 @@ final class DropCollector {
     private int arrivedTicks;
 
     DropCollector(BlockPos center, int radius, List<String> globs) {
-        this.center = center;
-        this.radius = radius;
+        this(new AABB(center).inflate(radius), globs);
+    }
+
+    /** Collects matching items inside {@code area} (e.g. an animal pen). */
+    DropCollector(AABB area, List<String> globs) {
+        this.area = area;
         this.globs = globs;
     }
 
@@ -81,8 +84,7 @@ final class DropCollector {
     }
 
     private List<ItemEntity> candidates(TaskContext ctx) {
-        AABB box = new AABB(center).inflate(radius);
-        return ctx.bot().level().getEntitiesOfClass(ItemEntity.class, box, e -> e.isAlive()
+        return ctx.bot().level().getEntitiesOfClass(ItemEntity.class, area, e -> e.isAlive()
                 && !skipped.contains(e.getId())
                 && (globs.isEmpty() || Ids.matchesAny(globs, McIds.item(e.getItem()))));
     }

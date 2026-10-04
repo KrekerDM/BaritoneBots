@@ -41,12 +41,10 @@ class CatalogI18nTest {
         for (String type : TaskTypes.ALL) {
             assertTrue(catalog.isTask(type), "catalog misses " + type);
         }
-        for (String unsupported : List.of("build", "breed", "slaughter", "shear")) {
-            assertFalse(catalog.isSupported(unsupported), unsupported + " should be marked unsupported");
-        }
         for (String supported : List.of("goto", "goto_player", "follow", "explore", "baritone", "mine", "farm",
                 "selection", "collect_drops", "recover", "eat", "idle", "take", "deposit", "inspect", "equip",
-                "craft", "transfer", "drop", "smelt_load", "smelt_collect", "guard", "attack")) {
+                "craft", "transfer", "drop", "smelt_load", "smelt_collect", "guard", "attack",
+                "build", "breed", "slaughter", "shear")) {
             assertTrue(catalog.isSupported(supported), supported + " should be supported");
         }
         assertTrue(catalog.isStep("kit") && catalog.isSupported("kit"));

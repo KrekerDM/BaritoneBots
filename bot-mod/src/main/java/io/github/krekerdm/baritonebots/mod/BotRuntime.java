@@ -238,6 +238,7 @@ public final class BotRuntime {
         step("eat", eat::tick);
         step("defense", defense::tick);
         step("tasks", tasks::tick);
+        step("queries", queries::tick);
         step("containers", containers::tick);
         step("status", status::tick);
     }

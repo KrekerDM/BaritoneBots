@@ -25,7 +25,10 @@
       {"name": "blocks", "type": "ids", "required": true},
       {"name": "amount", "type": "int", "required": false, "default": 0, "min": 0, "max": 100000, "unit": "items"},
       {"name": "minY", "type": "int", "required": false, "min": -64, "max": 320},
-      {"name": "maxY", "type": "int", "required": false, "min": -64, "max": 320}
+      {"name": "maxY", "type": "int", "required": false, "min": -64, "max": 320},
+      {"name": "strategy", "type": "enum", "required": false, "default": "normal", "enum": ["normal", "legit"]},
+      {"name": "y", "type": "int", "required": false, "min": -64, "max": 320},
+      {"name": "fakeOres", "type": "bool", "required": false, "default": false}
     ]},
     {"type": "farm", "continuous": false, "heavy": true, "supported": true, "args": [
       {"name": "center", "type": "pos", "required": true},
@@ -38,13 +41,15 @@
       {"name": "block", "type": "item", "required": false},
       {"name": "from", "type": "ids", "required": false}
     ]},
-    {"type": "build", "continuous": false, "heavy": true, "supported": false, "args": [
+    {"type": "build", "continuous": false, "heavy": true, "supported": true, "args": [
       {"name": "file", "type": "string", "required": true},
       {"name": "origin", "type": "pos", "required": true},
       {"name": "rotation", "type": "enum", "required": false, "default": "0", "enum": ["0", "90", "180", "270"]},
       {"name": "mirror", "type": "enum", "required": false, "default": "none", "enum": ["none", "front_back", "left_right"]},
       {"name": "box", "type": "box", "required": false},
-      {"name": "name", "type": "string", "required": false}
+      {"name": "name", "type": "string", "required": false},
+      {"name": "buildInLayers", "type": "bool", "required": false},
+      {"name": "layerOrder", "type": "bool", "required": false}
     ]},
     {"type": "collect_drops", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "radius", "type": "int", "required": false, "default": 8, "min": 1, "max": 64, "unit": "blocks"},
@@ -92,18 +97,18 @@
       {"name": "furnace", "type": "container", "required": true},
       {"name": "all", "type": "bool", "required": false, "default": false}
     ]},
-    {"type": "breed", "continuous": false, "heavy": false, "supported": false, "args": [
+    {"type": "breed", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "box", "type": "box", "required": true},
       {"name": "animal", "type": "string", "required": true},
       {"name": "food", "type": "item", "required": false},
       {"name": "max", "type": "int", "required": false, "default": 20, "min": 2, "max": 500, "unit": "animals"}
     ]},
-    {"type": "slaughter", "continuous": false, "heavy": false, "supported": false, "args": [
+    {"type": "slaughter", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "box", "type": "box", "required": true},
       {"name": "animal", "type": "string", "required": true},
       {"name": "keep", "type": "int", "required": false, "default": 4, "min": 0, "max": 500, "unit": "animals"}
     ]},
-    {"type": "shear", "continuous": false, "heavy": false, "supported": false, "args": [
+    {"type": "shear", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "box", "type": "box", "required": true}
     ]},
     {"type": "guard", "continuous": true, "heavy": false, "supported": true, "args": [

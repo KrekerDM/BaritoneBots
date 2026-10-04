@@ -8,6 +8,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 
 /** Direct player actions (look, use a block, attack, close menus, release keys). Client thread only. */
@@ -70,6 +71,18 @@ public final class Interact {
         lookAt(p, target.getBoundingBox().getCenter());
         mc.gameMode.attack(p, target);
         p.swing(InteractionHand.MAIN_HAND);
+    }
+
+    /**
+     * Looks at and right-clicks an entity with {@code hand} (feeding, shearing): {@code MultiPlayerGameMode#interact}
+     * sends the carried-item update and one interact packet aimed at the hitbox center.
+     */
+    public static InteractionResult useOnEntity(Minecraft mc, LocalPlayer p, Entity target, InteractionHand hand) {
+        Vec3 hit = target.getBoundingBox().getCenter();
+        lookAt(p, hit);
+        InteractionResult r = mc.gameMode.interact(p, target, new EntityHitResult(target, hit), hand);
+        p.swing(hand);
+        return r;
     }
 
     /** True while a non-inventory menu (chest, furnace, ...) is open. */

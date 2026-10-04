@@ -3,6 +3,8 @@ package io.github.krekerdm.baritonebots.mod.task;
 import io.github.krekerdm.baritonebots.common.msg.TaskTypes;
 import io.github.krekerdm.baritonebots.mod.task.impl.AttackTask;
 import io.github.krekerdm.baritonebots.mod.task.impl.BaritoneCommandTask;
+import io.github.krekerdm.baritonebots.mod.task.impl.BreedTask;
+import io.github.krekerdm.baritonebots.mod.task.impl.BuildTask;
 import io.github.krekerdm.baritonebots.mod.task.impl.CollectDropsTask;
 import io.github.krekerdm.baritonebots.mod.task.impl.CraftTask;
 import io.github.krekerdm.baritonebots.mod.task.impl.DepositTask;
@@ -20,6 +22,8 @@ import io.github.krekerdm.baritonebots.mod.task.impl.InspectTask;
 import io.github.krekerdm.baritonebots.mod.task.impl.MineTask;
 import io.github.krekerdm.baritonebots.mod.task.impl.RecoverTask;
 import io.github.krekerdm.baritonebots.mod.task.impl.SelectionTask;
+import io.github.krekerdm.baritonebots.mod.task.impl.ShearTask;
+import io.github.krekerdm.baritonebots.mod.task.impl.SlaughterTask;
 import io.github.krekerdm.baritonebots.mod.task.impl.SmeltCollectTask;
 import io.github.krekerdm.baritonebots.mod.task.impl.SmeltLoadTask;
 import io.github.krekerdm.baritonebots.mod.task.impl.TakeTask;
@@ -61,6 +65,10 @@ public final class TaskRegistry {
         register(TaskTypes.SMELT_COLLECT, SmeltCollectTask::new);
         register(TaskTypes.ATTACK, AttackTask::new);
         register(TaskTypes.GUARD, GuardTask::new);
+        register(TaskTypes.BUILD, BuildTask::new);
+        register(TaskTypes.BREED, BreedTask::new);
+        register(TaskTypes.SLAUGHTER, SlaughterTask::new);
+        register(TaskTypes.SHEAR, ShearTask::new);
     }
 
     private TaskRegistry() {

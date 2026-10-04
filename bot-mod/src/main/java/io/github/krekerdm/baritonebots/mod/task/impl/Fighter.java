@@ -27,7 +27,7 @@ import java.util.Set;
  * fails to reach three times is reported {@link Result#UNREACHABLE}.
  */
 final class Fighter {
-    enum Result { APPROACHING, ATTACKING, UNREACHABLE }
+    enum Result { APPROACHING, IN_REACH, ATTACKING, UNREACHABLE }
 
     private static final int PATH_GRACE_TICKS = 6;
     private static final int MAX_PATH_FAILS = 3;
@@ -46,6 +46,25 @@ final class Fighter {
     }
 
     Result engage(TaskContext ctx, LivingEntity t) {
+        Result r = approach(ctx, t);
+        if (r != Result.IN_REACH) {
+            return r;
+        }
+        LocalPlayer p = ctx.player();
+        ctx.bot().defense.equipWeapon(p);
+        Interact.lookAt(p, t.getBoundingBox().getCenter());
+        if (p.getAttackStrengthScale(0.5f) >= 0.9f) {
+            Interact.attack(ctx.mc(), p, t);
+        }
+        ctx.step("attacking " + McIds.entity(t), -1);
+        return Result.ATTACKING;
+    }
+
+    /**
+     * Walks towards {@code t}; once its hitbox is in reach, holds the pause claim and returns {@link Result#IN_REACH}
+     * (used directly by tasks that interact with animals instead of hitting them).
+     */
+    Result approach(TaskContext ctx, LivingEntity t) {
         LocalPlayer p = ctx.player();
         if (t != target) {
             target = t;
@@ -58,13 +77,7 @@ final class Fighter {
                 ctx.bot().pause.claim(claimOwner(ctx));
                 holding = true;
             }
-            ctx.bot().defense.equipWeapon(p);
-            Interact.lookAt(p, t.getBoundingBox().getCenter());
-            if (p.getAttackStrengthScale(0.5f) >= 0.9f) {
-                Interact.attack(ctx.mc(), p, t);
-            }
-            ctx.step("attacking " + McIds.entity(t), -1);
-            return Result.ATTACKING;
+            return Result.IN_REACH;
         }
         releaseHold(ctx);
         ICustomGoalProcess cg = ctx.baritone().getCustomGoalProcess();
