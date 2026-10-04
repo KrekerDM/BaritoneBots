@@ -1,90 +1,164 @@
+**Русский** · [English](README.en.md)
+
 # BaritoneBots
 
-[Русский](README.ru.md)
+![Minecraft](https://img.shields.io/badge/Minecraft-26.2-62B47A)
+![Baritone](https://img.shields.io/badge/Baritone-1.19.0-3B82C4)
+![Fabric](https://img.shields.io/badge/Fabric-0.19.5-DBD0B4)
+![Java](https://img.shields.io/badge/Java-25-E76F00?logo=openjdk&logoColor=white)
+![Tests](https://img.shields.io/badge/%D0%A2%D0%B5%D1%81%D1%82%D0%BE%D0%B2-211-2EA043)
+![Status](https://img.shields.io/badge/%D0%A1%D1%82%D0%B0%D1%82%D1%83%D1%81-beta-D9A400)
+![License](https://img.shields.io/badge/License-MIT-555555)
 
-Bots for Minecraft Java 26.2 that move and work through Baritone 1.19.0. Each bot is a real client without a window. You control them from the manager's web panel on the PC that runs the bots. Press a button and a bot walks to a chest, takes armour, puts it on and goes mining.
+Боты для Minecraft Java 26.2, которые сами решают, что им для работы нужно.
+Перед задачей бот смотрит в свой инвентарь, идёт к сундукам за нужной киркой,
+едой и материалами, а не стоит с пустыми руками и ошибкой «нечем копать».
 
-Tested 2026-10-04 on a local Paper 26.2 build 129, offline mode, flat world:
+Каждый бот — настоящий клиент Minecraft без окна, а ходит и копает он через
+Baritone. Управление идёт из веб-панели на том ПК, где запущены боты. Выбираешь,
+что сделать: «построить по схематике», «держать на складе 128 факелов» или
+«развиться до железа». Работу между ботами менеджер делит сам.
 
-| Task | Result |
+## Что умеет
+
+- **27 задач для бота**: ходьба, следование, добыча, ферма, расчистка, заливка
+  областей, стройка по схематике, сундуки, крафт, плавка, животные, бой,
+  охрана, возврат за вещами после смерти, любая команда Baritone.
+- **Сам находит сундуки** вокруг себя и дома, заглядывает в них и помнит, что
+  где лежит. Размечать склад вручную не нужно.
+- **Автоснабжение**: перед задачей бот берёт инструмент нужного уровня, еду,
+  блоки и материалы. Сломалась кирка — сходит за новой.
+- **Автосортировка**: лут из приёмных сундуков разносится по 9 категориям,
+  а пустой сундук сам получает категорию по тому, что в нём лежит.
+- **Цели вместо команд**: «добыть деревянную кирку» или «развиться до железа».
+  Рецепты, дроп и уровень кирки берутся прямо из файлов игры 26.2: 1491 рецепт,
+  1113 таблиц дропа.
+- **7 видов совместных проектов**: стройка, добыча по квоте, расчистка, ферма,
+  загон, сортировка, плавка. Роли из 10 вариантов раздаются автоматически
+  и переходят туда, где не хватает рук.
+- **Держать запас, расписания, правила «если — то»**: «на складе всегда 64 хлеба»,
+  «собирать урожай каждые 30 минут», «HP ниже 6 — домой».
+- **Анти-иксрей**: на сервере со скрытой рудой бот копает ветками на лучшей
+  высоте и берёт только руду, которую видит.
+- **Плагин-компаньон** для своего сервера: проверка ботов по токену, журнал
+  блоков с откатом, авто-логин AuthMe/nLogin. Без плагина всё остальное работает.
+
+## Предупреждение
+
+Это бета. Мод, менеджер и плагин собраны и покрыты 211 тестами, но часть
+функций ещё не прошла проверку в живой игре, а в панели нет экранов для
+проектов, расписаний и правил: они пока настраиваются через API. Таблица
+ниже показывает, что проверено на настоящем сервере.
+
+Обхода античитов в проекте нет. Baritone на чужом сервере — на твой риск и
+по правилам этого сервера.
+
+## Проверено на сервере
+
+Paper 26.2 build 129, офлайн-режим, плоский мир, 2026-10-04:
+
+| Что | Результат |
 |---|---|
-| Bot start until it joins the server | 50 s |
-| `goto` over 22 blocks | 4 s, stopped 2 blocks from the target, tolerance 2 |
-| `take` from a chest | took 4 armour pieces, a sword, a shovel and 8 of 16 bread |
-| `equip` | put on 4 armour pieces |
-| `mine` dirt, target 6 | collected 9, picked the shovel by itself |
-| `deposit` | stored 9 dirt, kept armour and bread per the `keep` rule |
+| Запуск бота до входа на сервер | 50–65 s |
+| `goto` на 22 блока | 4 s, остановился в 2 блоках от цели, допуск 2 |
+| Снаряжение из сундука | взял железный сет, меч, лопату и 8 из 16 хлеба, надел броню |
+| `mine` земли, цель 6 | собрал 9, лопату выбрал сам |
+| Цель «деревянная кирка» с пустым инвентарём | брёвна → доски → верстак, поставил его сам → палки → кирка, 118 s |
+| Автоснабжение | осмотрел 3 сундука, взял брёвна, скрафтил 8 досок |
+| Автопилот в простое | сам отнёс сырую руду со склада в печь |
+| Плагин-компаньон | бот прошёл проверку по токену, журнал отвечает |
 
-## Parts
+Ещё не проверялись в игре: стройка по схематике, животные, плавка до конца,
+проекты с несколькими ботами, Microsoft-аккаунты.
 
-| Part | What it does |
+## Сколько потребляет
+
+| Процесс | RAM |
 |---|---|
-| `manager` | One jar. Installs Minecraft, Fabric and the mods through HeadlessMC 2.10.0, starts and restarts bots, keeps task queues, scenarios, kits and world knowledge. Serves the web panel on `127.0.0.1:8765`. |
-| `bot-mod` | Fabric mod inside every bot. Runs tasks through the Baritone API, reports status, logs in, reconnects, eats, fights mobs and respawns. |
-| `common` | The protocol between them and a reader for `.schem` and `.litematic` schematics. |
+| игра бота | 900 MB, из них heap 300–430 MB при лимите 1024 MB |
+| лаунчер HeadlessMC | 102 MB на бота |
+| менеджер | 111 MB на всех |
 
-The manager talks to the bots over TCP on `127.0.0.1`. The server needs no extra port; it sees the bots as ordinary players.
+В простое бот тратит 0.07 секунды CPU в секунду, это около 7% одного ядра.
+На 5 ботов выходит около 5 GB RAM. Мод не рисует кадры, не играет звуки и держит
+дальность прорисовки 4 чанка. Память на бота задаётся пресетом: eco 768 MB,
+normal 1024 MB или performance 2048 MB.
 
-## Resource use
+## Быстрый старт
 
-Measured with one bot, heap capped at 1024 MB:
+### Готовая сборка
 
-| Process | RAM |
-|---|---|
-| bot game | 900 MB, of which heap 300–430 MB |
-| HeadlessMC launcher | 102 MB per bot |
-| manager | 111 MB in total |
-
-An idle bot uses 0.07 CPU seconds per second. Five bots come to about 5 GB of RAM. There is no window: the mod skips frame rendering and sounds and keeps render distance at 4 chunks. Memory per bot follows a preset: eco 768 MB, normal 1024 MB or performance 2048 MB.
-
-## Running it
-
-1. Install Java 25, for example Temurin.
-2. Download `baritonebots-manager-<version>.jar` from Releases into an empty folder.
-3. Run:
+1. Поставь Java 25, например Temurin.
+2. Скачай `baritonebots-manager-*.jar` из [Releases](https://github.com/KrekerDM/BaritoneBots/releases) в пустую папку.
+3. Запусти:
    ```bash
-   java -jar baritonebots-manager-0.1.0.jar
+   java -jar baritonebots-manager-0.2.0-beta.1.jar
    ```
-   The manager opens the panel in your browser and prints the address with the access token to the console.
-4. In the panel: Settings → Servers → server address. Bots → add bots with offline accounts.
-5. Settings → Runtime → Install. The manager downloads HeadlessMC, Fabric 0.19.5, Fabric API, Baritone, FerriteCore and Minecraft 26.2.
-6. Start the bots and give them tasks from the bot page.
+   Панель откроется в браузере, адрес с токеном менеджер печатает в консоль.
+4. «Настройки» → «Серверы»: адрес сервера. Если там скрыта руда, включи
+   анти-иксрей в профиле сервера.
+5. «Настройки» → «Боты»: добавь ботов с офлайн-аккаунтами.
+6. «Настройки» → «Окружение» → «Установить». Менеджер скачает HeadlessMC,
+   Fabric, Fabric API, Baritone, FerriteCore и Minecraft 26.2.
+7. Запусти ботов и давай задачи со страницы бота.
 
-Data lives in `BaritoneBots-data` next to the jar: settings, the panel token, bot passwords, downloads. Do not publish that folder.
+Данные лежат в `BaritoneBots-data` рядом с jar: настройки, токен панели,
+пароли ботов. Папку не публикуй.
 
-## On your own server
-
-* **AuthMe / nLogin.** The bot reads the register or login prompt in chat and types `/register` or `/login` itself, with a password the manager generates per bot. Prompt patterns and commands are configurable per server profile.
-* **GrimAC.** If you run the server, exempt the bots with LuckPerms:
-  ```
-  lp creategroup bots
-  lp group bots permission set grim.exempt true
-  lp user Bot1 parent add bots
-  ```
-  Grim checks `grim.exempt` every tick, so no rejoin is needed. After you remove it, the bot has to rejoin. In offline mode the permission follows the name, so give bots long AuthMe passwords.
-* **Companion plugin (optional).** If you run a Paper 26.2 server, `baritonebots-companion-<version>.jar` gives token-verified bots smaller view distances, permission nodes such as `grim.exempt` (only for verified bots, not for anyone using a bot's name), AuthMe / nLogin auto-login, name protection by IP, a block journal and rollback. See [docs/PLUGIN.md](docs/PLUGIN.md).
-* **Other servers.** The project contains no anticheat evasion. Running Baritone on someone else's server is at your own risk and subject to that server's rules.
-
-## Tasks
-
-`goto`, `goto_player`, `follow`, `explore`, `mine`, `farm`, area clearing, `collect_drops`, `take`, `deposit`, `inspect`, `equip`, `eat`, `recover` (go back for items after death) and `baritone` — any Baritone command without `#`. Manager steps: `kit` (gear from chests with the "kit" role), `deposit_storage`, `home`, `wait`, `goto_waypoint`. Scenarios chain these steps and can repeat.
-
-## Not there yet
-
-* Shared projects: building a schematic with several bots, automatic roles. That is phase 2.
-* Crafting, smelting, animals and storage sorting.
-* Microsoft accounts for online-mode servers. Offline accounts only for now.
-* Several bots in one JVM. Baritone cannot do it, so each bot is its own process of about 1 GB.
-* A test on a live public server: every number above comes from the local test server.
-
-## Building
+### Из исходников
 
 ```bash
 ./gradlew build
 ```
 
-Requires Java 25. Output: `manager/build/libs/baritonebots-manager-<version>.jar` with the mod inside, and the optional server plugin `companion-plugin/build/libs/baritonebots-companion-<version>.jar`. Design and protocol: [docs/SPEC.md](docs/SPEC.md); decisions taken during development: [docs/dev/DECISIONS.md](docs/dev/DECISIONS.md).
+Нужна Java 25. Готовые jar лежат в `manager/build/libs`, `bot-mod/build/libs`
+и `companion-plugin/build/libs`. Мод уже вшит в jar менеджера.
 
-## Licence
+## На своём сервере
 
-MIT. Baritone is LGPL-3.0; the manager downloads it separately and it is not part of this repository.
+- **AuthMe / nLogin.** Бот сам вводит `/register` и `/login`. Пароль менеджер
+  генерирует для каждого бота, его видно в «Настройки» → «Боты».
+- **DiscordSRV.** Если сервер требует привязку, впиши ботов в
+  `plugins/DiscordSRV/linking.yml` → `Bypass names`.
+- **GrimAC.** Исключение для своих ботов через LuckPerms:
+  ```
+  lp creategroup bots
+  lp group bots permission set grim.exempt true
+  lp user Bot1 parent add bots
+  ```
+  Grim проверяет право каждый тик, перезаходить не нужно. В офлайн-режиме
+  право привязано к нику, поэтому дай ботам длинные пароли. С плагином-компаньоном
+  можно выдать `grim.exempt` только ботам, которые прошли проверку по токену.
+- **Плагин-компаньон.** Установка и настройки — в [docs/PLUGIN.md](docs/PLUGIN.md).
+
+## Как это устроено
+
+| Часть | Что делает |
+|---|---|
+| `manager` | Один jar: ставит Minecraft, Fabric и моды через HeadlessMC 2.10.0, запускает и перезапускает ботов, держит очереди, проекты, автопилот и сведения о мире, отдаёт панель на `127.0.0.1:8765`. |
+| `bot-mod` | Fabric-мод внутри каждого бота: выполняет задачи через API Baritone, сообщает состояние, логинится, переподключается, ест, отбивается, встаёт после смерти. |
+| `companion-plugin` | Необязательный плагин Paper 26.2 для своего сервера. |
+| `common` | Протокол между частями и чтение схематик `.schem` и `.litematic`. |
+
+Менеджер говорит с ботами по TCP на `127.0.0.1`, отдельный порт на сервере не
+нужен. Планировщик каждые 5 секунд раздаёт работу свободным ботам, а ручные
+задачи всегда важнее проектных. Протокол и все настройки описаны в
+[docs/SPEC.md](docs/SPEC.md), решения при разработке — в
+[docs/dev/DECISIONS.md](docs/dev/DECISIONS.md).
+
+## Ограничения
+
+- Один бот — один процесс примерно на 1 GB. Несколько ботов в одной JVM
+  Baritone не поддерживает.
+- Бот ходит пешком: телепортов нет.
+- Менеджер знает содержимое сундука только после того, как бот его открыл.
+  Новый склад бот сначала обходит и осматривает.
+- Ресурсы только честные: всё, что бот не может добыть, скрафтить или
+  переплавить, попадает в список «докинь вручную».
+- Под анти-иксреем добыча медленнее: бот роет ветки, а не идёт к руде напрямую.
+- ИИ-диспетчер через локальную Ollama и экраны проектов в панели ещё в работе.
+
+## Лицензия
+
+MIT. Baritone распространяется по LGPL-3.0, менеджер скачивает его отдельно,
+в репозиторий он не входит.
