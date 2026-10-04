@@ -331,10 +331,24 @@ function appliesNote(controls, patch) {
 // Global sections (general, runtime, behaviour, baritone, client, status, planner)
 // ------------------------------------------------------------------
 
-function sectionView(host, sectionId) {
+// Sections with a dedicated editor on the automation screen.
+const AUTOMATION_TABS = { orders: "orders", schedules: "schedules", rules: "rules", keepProfiles: "hygiene" };
+
+/**
+ * One settings section (or a filtered part of it) as a form saved with a
+ * merge patch; the automation screen reuses it for keep profiles and sign words.
+ */
+export function renderSettingsSection(host, sectionId, opts = {}) {
+  return sectionView(host, sectionId, opts);
+}
+
+function sectionView(host, sectionId, { filter, titleKey, primary = true } = {}) {
   const schema = store.settings.schema;
-  const fields = schema.fields.filter((f) => !f.path.includes("[]") && f.path.split(".")[0] === sectionId && !ITEM_LISTS.has(f.path));
-  const controls = fields.map((f) => settingControl(f, f.path));
+  const fields = schema.fields.filter(
+    (f) => !f.path.includes("[]") && f.path.split(".")[0] === sectionId && !ITEM_LISTS.has(f.path) && (!filter || filter(f)),
+  );
+  const controls = fields.map((f) => settingControl(f, f.path, SPECIAL[f.path] ? SPECIAL[f.path](f) : undefined));
+  const automationTab = !filter && AUTOMATION_TABS[sectionId];
   const status = h("p", { class: "field-hint", "aria-live": "polite" });
   const errHost = h("div");
   const fill = () => {
@@ -345,7 +359,7 @@ function sectionView(host, sectionId) {
   const rt = sectionId === "runtime" ? runtimeBox() : null;
   const needInstall = rt && rt.needInstall;
 
-  const saveBtn = h("button", { type: "submit", class: ["btn", needInstall ? "btn-ghost" : "btn-primary"] }, t("set.save"));
+  const saveBtn = h("button", { type: "submit", class: ["btn", needInstall || !primary ? "btn-ghost" : "btn-primary"] }, t("set.save"));
   const form = h(
     "form",
     { class: "stack", novalidate: true },
@@ -396,10 +410,188 @@ function sectionView(host, sectionId) {
   mount(
     host,
     rt ? rt.el : null,
-    h("section", { class: "section" }, h("div", { class: "head" }, h("h2", { class: "h2" }, t(`settings.section.${sectionId}`, null, sectionId))), form),
+    h(
+      "section",
+      { class: "section" },
+      h("div", { class: "head" }, h("h2", { class: "h2" }, titleKey ? t(titleKey) : t(`settings.section.${sectionId}`, null, sectionId))),
+      automationTab ? h("p", { class: "small" }, t("set.automationNote"), " ", h("a", { href: `#/automation/${automationTab}` }, t(`auto.tab.${automationTab}`))) : null,
+      form,
+    ),
   );
   return rt ? { update: rt.update } : null;
 }
+
+// ------------------------------------------------------------------
+// Structured editors for JSON-typed fields (keep profiles, word and count maps)
+// ------------------------------------------------------------------
+const TOOL_KINDS = ["pickaxe", "axe", "shovel", "hoe", "sword", "shears"];
+const SIGN_ROLES = ["storage", "inbox", "kit", "supply", "fuel", "trash"];
+const lines = (v) => (Array.isArray(v) ? v.join("\n") : "");
+const unlines = (s) => s.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+/** keepProfiles: name → {armor, weapon, tools, food:{max}, blocks:{globs, count}, extra} (SPEC §5.7f). */
+function keepProfilesEditor() {
+  const list = h("div", { class: "stack" });
+  let rows = [];
+
+  const profileRow = (name, p) => {
+    const nameIn = h("input", { type: "text", maxlength: 32, value: name, "aria-label": t("set.kp.name") });
+    const armor = select(["worn", "none"].map((v) => ({ value: v, label: t(`set.kp.armor.${v}`) })), p.armor || "worn");
+    const weapon = select(["best", "none"].map((v) => ({ value: v, label: t(`set.kp.weapon.${v}`) })), p.weapon || "best");
+    const tools = TOOL_KINDS.map((k) => ({ k, input: h("input", { type: "checkbox", value: k, checked: (p.tools || []).includes(k) }) }));
+    const foodIn = h("input", { type: "number", min: 0, max: 2304, step: 1, inputmode: "numeric", value: String(p.food?.max ?? 64) });
+    const blocksCount = h("input", { type: "number", min: 0, max: 2304, step: 1, inputmode: "numeric", value: String(p.blocks?.count ?? 64) });
+    const blocksGlobs = h("textarea", { rows: 2, spellcheck: "false" });
+    blocksGlobs.value = lines(p.blocks?.globs);
+    const extra = h("textarea", { rows: 3, spellcheck: "false" });
+    extra.value = lines(p.extra);
+    const row = { nameIn, get: null, el: null };
+    const remove = btn(t("set.kp.remove"), () => {
+      rows = rows.filter((r) => r !== row);
+      row.el.remove();
+    });
+    row.el = h(
+      "fieldset",
+      null,
+      h("legend", null, t("set.kp.profile")),
+      h(
+        "div",
+        { class: "fields" },
+        field(t("set.kp.name"), nameIn, { hint: t("set.kp.nameHint") }),
+        field(t("set.kp.armor"), armor),
+        field(t("set.kp.weapon"), weapon),
+        field(t("set.kp.food"), foodIn, { hint: t("set.kp.foodHint") }),
+        field(t("set.kp.blocksCount"), blocksCount, { hint: t("set.kp.blocksCountHint") }),
+      ),
+      h("div", { class: "field" }, h("span", { class: "label" }, t("set.kp.tools")), h("div", { class: "row" }, tools.map((x) => h("label", { class: "check" }, x.input, h("span", null, t(`set.kp.tool.${x.k}`)))))),
+      h("div", { class: "fields" }, field(t("set.kp.blocksGlobs"), blocksGlobs, { hint: t("set.kp.blocksGlobsHint"), wide: true }), field(t("set.kp.extra"), extra, { hint: t("set.kp.extraHint"), wide: true })),
+      h("div", { class: "row-sm" }, remove),
+    );
+    row.get = () => {
+      const food = Number(foodIn.value);
+      const count = Number(blocksCount.value);
+      if (!Number.isInteger(food) || food < 0 || !Number.isInteger(count) || count < 0) return { error: t("form.err.int") };
+      return {
+        value: {
+          armor: armor.value,
+          weapon: weapon.value,
+          tools: tools.filter((x) => x.input.checked).map((x) => x.k),
+          food: { max: food },
+          blocks: { globs: unlines(blocksGlobs.value), count },
+          extra: unlines(extra.value),
+        },
+      };
+    };
+    return row;
+  };
+
+  const add = btn(t("set.kp.add"), () => {
+    const row = profileRow("", { armor: "worn", weapon: "best", tools: ["pickaxe", "axe"], food: { max: 64 }, blocks: { globs: [], count: 64 }, extra: [] });
+    rows.push(row);
+    list.append(row.el);
+    row.nameIn.focus();
+  });
+
+  return {
+    control: h("div", { class: "stack" }, list, h("div", { class: "row-sm" }, add)),
+    wide: true,
+    get() {
+      const out = {};
+      for (const r of rows) {
+        const name = r.nameIn.value.trim();
+        if (!name) return { error: t("set.kp.err.name") };
+        if (out[name]) return { error: t("set.kp.err.dup", { name }) };
+        const v = r.get();
+        if (v.error) return v;
+        out[name] = v.value;
+      }
+      return { value: out };
+    },
+    set(v) {
+      rows = Object.entries(v && typeof v === "object" ? v : {}).map(([name, p]) => profileRow(name, p || {}));
+      list.replaceChildren(...rows.map((r) => r.el));
+    },
+  };
+}
+
+/** autopilot.signWords: word on a sign → container role or sorted:<category> (SPEC §5.7e). */
+function signWordsEditor() {
+  const body = h("tbody");
+  const targets = () => {
+    const cats = (store.settings?.config?.autopilot?.categories || []).map((c) => c.name).filter(Boolean);
+    return [
+      ...SIGN_ROLES.map((r) => ({ value: r, label: t(`containerRole.${r}`, null, r) })),
+      ...cats.map((c) => ({ value: `sorted:${c}`, label: `${t("containerRole.sorted")}: ${c}` })),
+    ];
+  };
+  const row = (word, target) => {
+    const w = h("input", { type: "text", maxlength: 32, value: word, "aria-label": t("set.sw.word") });
+    const opts = targets();
+    if (target && !opts.some((o) => o.value === target)) opts.push({ value: target, label: target });
+    const s = select(opts, target || "storage", { "aria-label": t("set.sw.target") });
+    const tr = h("tr", null, h("td", null, w), h("td", null, s), h("td", { class: "actions" }, btn(t("bot.remove"), () => tr.remove(), { ariaLabel: `${t("bot.remove")}: ${word}` })));
+    tr._get = () => ({ word: w.value.trim(), target: s.value });
+    return tr;
+  };
+  return {
+    control: h(
+      "div",
+      { class: "stack-sm" },
+      h("div", { class: "table-wrap" }, h("table", { class: "table" }, h("thead", null, h("tr", null, h("th", { scope: "col" }, t("set.sw.word")), h("th", { scope: "col" }, t("set.sw.target")), h("th", { scope: "col" }, t("bot.qcol.actions")))), body)),
+      h(
+        "div",
+        { class: "row-sm" },
+        btn(t("set.sw.add"), () => {
+          const tr = row("", "storage");
+          body.append(tr);
+          tr.querySelector("input").focus();
+        }),
+      ),
+    ),
+    wide: true,
+    hint: t("set.sw.hint"),
+    get() {
+      const out = {};
+      for (const tr of body.children) {
+        const { word, target } = tr._get();
+        if (!word) continue;
+        out[word.toLowerCase()] = target;
+      }
+      return { value: out };
+    },
+    set(v) {
+      body.replaceChildren(...Object.entries(v && typeof v === "object" ? v : {}).map(([word, target]) => row(word, target)));
+    },
+  };
+}
+
+/** {glob: count} as "glob count" lines (autopilot.autoTrash.keepCounts). */
+function countsMapEditor() {
+  const area = h("textarea", { rows: 4, spellcheck: "false", placeholder: "minecraft:sand 64" });
+  return {
+    control: area,
+    wide: true,
+    hint: t("set.counts.hint"),
+    get() {
+      const out = {};
+      for (const line of unlines(area.value)) {
+        const m = line.match(/^(\S+)\s+(\d+)$/);
+        if (!m) return { error: t("form.err.itemCountLine", { line }) };
+        out[m[1]] = Number(m[2]);
+      }
+      return { value: out };
+    },
+    set(v) {
+      area.value = Object.entries(v && typeof v === "object" ? v : {}).map(([g, c]) => `${g} ${c}`).join("\n");
+    },
+  };
+}
+
+const SPECIAL = {
+  keepProfiles: keepProfilesEditor,
+  "autopilot.signWords": signWordsEditor,
+  "autopilot.autoTrash.keepCounts": countsMapEditor,
+};
 
 // ------------------------------------------------------------------
 // Runtime install state
@@ -584,8 +776,8 @@ const BOTS = {
       "select",
       null,
       h("option", { value: "offline" }, t("settings.bots.account.type.option.offline", null, "offline")),
-      // The catalog label already says "not supported yet"; the option stays visible but cannot be picked.
-      h("option", { value: "microsoft", disabled: true }, t("settings.bots.account.type.option.microsoft", null, "microsoft")),
+      // Microsoft: the device-code login runs from the bot page (SPEC §5.4).
+      h("option", { value: "microsoft" }, t("settings.bots.account.type.option.microsoft", null, "microsoft")),
     );
     const presetName = cfg.runtime?.memoryPreset || "normal";
     const presets = store.settings.schema.memoryPresets || {};

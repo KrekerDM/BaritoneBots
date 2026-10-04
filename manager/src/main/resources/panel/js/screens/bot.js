@@ -2,11 +2,12 @@
 // events, Microsoft login and companion plugin actions.
 
 import { api, enc, listOf } from "../api.js";
-import { h, mount, btn, busy, toast, confirmDialog, errorBox, throttle, empty, spec, table, field } from "../dom.js";
+import { h, mount, btn, busy, toast, confirmDialog, errorBox, throttle, spec, table, field, select } from "../dom.js";
 import { t, tid } from "../i18n.js";
-import { store, loadCatalog, serverName, behaviourOf } from "../store.js";
-import { processEl, botStateEl, num, noData, isNum, timeEl, levelEl, argsSummary, shortId, durationEl } from "../format.js";
+import { store, loadCatalog, loadSettings, serverName, behaviourOf } from "../store.js";
+import { processEl, botStateEl, num, noData, isNum, timeEl, levelEl, argsSummary, shortId, durationEl, duration } from "../format.js";
 import { taskForm, templateTitle } from "../forms.js";
+import { ownerName } from "../refpick.js";
 import * as bv from "../botview.js";
 import { eventText } from "./events.js";
 
@@ -14,6 +15,18 @@ const LOG_LINES = 200;
 const LOG_KEEP = 600;
 const EVENTS_SHOWN = 100;
 const ARMOR_SLOTS = ["head", "chest", "legs", "feet"];
+const TIERS = ["wood", "stone", "iron", "diamond"];
+const TRASH_TO = ["drop", "store", "trash_chest"];
+const PLUGIN_EVENTS_SHOWN = 5;
+// HeadlessMC keeps a device-code login open for 15 min (MicrosoftLogin.LOGIN_TIMEOUT_MS).
+const MS_LOGIN_TTL_SEC = 900;
+const MS_POLL_MS = 3000;
+
+/** Argument default of a manager step from the catalog (e.g. the default keep profile of "trash"). */
+function stepDefault(step, arg) {
+  const s = (store.catalog?.managerSteps || []).find((x) => (x.step || x.name || x.type) === step);
+  return (s?.args || []).find((a) => a.name === arg)?.default;
+}
 
 export function render(root, params) {
   const id = params.id;
@@ -34,6 +47,7 @@ export function render(root, params) {
   const logState = h("p", { class: "small dim" });
   const eventsHost = h("div");
   const msHost = h("div", { class: "stack" });
+  const pluginHost = h("div", { class: "stack-sm" });
   let events = [];
   let eventsError = null;
   let logLines = [];
@@ -71,6 +85,127 @@ export function render(root, params) {
       b.status ? [" · ", botStateEl(b.status.state)] : null,
     );
   }
+
+  // ----------------------------------------------------------------
+  // Quick actions: one click each, no coordinates
+  // ----------------------------------------------------------------
+  const quickNote = h("p", { class: "field-hint", "aria-live": "polite" });
+  const ownerNote = h("p", { class: "field-hint" });
+
+  async function queueTask(button, task, mode, what) {
+    await busy(button, async () => {
+      quickNote.textContent = t("ui.sending");
+      await api.post(`/api/bots/${enc(id)}/tasks`, { task, mode });
+      quickNote.textContent = t("quick.queued", { what });
+    });
+  }
+
+  const profileSel = h("select");
+  const fillProfiles = () => {
+    const names = Object.keys(store.settings?.config?.keepProfiles || {});
+    const def = stepDefault("trash", "profile");
+    if (def && !names.includes(def)) names.unshift(def);
+    const cur = profileSel.value || def || names[0] || "";
+    profileSel.replaceChildren(...names.map((n) => h("option", { value: n }, n)));
+    if (cur) profileSel.value = cur;
+  };
+  profileSel.addEventListener("focus", fillProfiles);
+  const trashTo = select(
+    TRASH_TO.map((v) => ({ value: v, label: t(`step.trash.arg.to.option.${v}`, null, v) })),
+    "drop",
+  );
+  const trashBtn = btn(
+    t("quick.trash"),
+    (e) => {
+      const args = { to: trashTo.value };
+      if (profileSel.value) args.profile = profileSel.value;
+      // In front of the queue: the bot clears its inventory before the next task.
+      queueTask(e.currentTarget, { type: "trash", args }, "front", t("quick.trash"));
+    },
+    { kind: "primary", small: false },
+  );
+
+  const comeBtn = btn(
+    t("quick.come"),
+    (e) => queueTask(e.currentTarget, { type: "goto", args: { pos: { ref: "owner" }, range: 2 } }, "replace", t("quick.come")),
+    { small: false },
+  );
+  const followBtn = btn(
+    t("quick.follow"),
+    (e) => queueTask(e.currentTarget, { type: "follow", args: { player: ownerName() } }, "replace", t("quick.follow")),
+    { small: false },
+  );
+  const stopBtn = btn(
+    t("quick.stop"),
+    (e) =>
+      busy(e.currentTarget, async () => {
+        await api.post(`/api/bots/${enc(id)}/clear`);
+        quickNote.textContent = t("quick.stopped");
+      }),
+    { small: false },
+  );
+
+  const tierSel = select(
+    TIERS.map((v) => ({ value: v, label: t(`quick.tier.${v}`) })),
+    stepDefault("progress", "tier") || "iron",
+  );
+  const progressBtn = btn(
+    t("quick.progressGo"),
+    (e) => queueTask(e.currentTarget, { type: "progress", args: { tier: tierSel.value } }, "append", `${t("quick.progress")} ${t(`quick.tier.${tierSel.value}`)}`),
+    { small: false },
+  );
+
+  const obtainItem = h("input", { type: "text", list: "dl-items", autocomplete: "off", spellcheck: "false", placeholder: "minecraft:iron_ingot" });
+  const obtainCount = h("input", { type: "number", min: 1, max: 2304, step: 1, value: "16", inputmode: "numeric" });
+  const obtainBtn = btn(
+    t("quick.obtainGo"),
+    (e) => {
+      const item = obtainItem.value.trim();
+      const count = Number(obtainCount.value);
+      if (!item) {
+        quickNote.textContent = t("quick.err.item");
+        obtainItem.focus();
+        return;
+      }
+      if (!Number.isInteger(count) || count < 1 || count > 2304) {
+        quickNote.textContent = t("form.err.max", { max: 2304 });
+        obtainCount.focus();
+        return;
+      }
+      queueTask(e.currentTarget, { type: "obtain", args: { item, count } }, "append", `${t("quick.obtain")} ${shortId(item)} ${count}`);
+    },
+    { small: false },
+  );
+
+  function renderOwnerNote() {
+    const owner = ownerName();
+    comeBtn.disabled = !owner;
+    followBtn.disabled = !owner;
+    if (owner) {
+      ownerNote.textContent = t("quick.ownerIs", { owner });
+    } else {
+      ownerNote.replaceChildren(t("quick.noOwner"), " ", h("a", { href: "#/settings/general" }, t("quick.setOwner")));
+    }
+  }
+
+  const quickEl = h(
+    "div",
+    { class: "stack" },
+    h("div", { class: "row row-end quick-row" }, trashBtn, field(t("quick.profile"), profileSel), field(t("quick.to"), trashTo)),
+    h("p", { class: "field-hint" }, t("quick.profileHint")),
+    h("div", { class: "row-sm" }, comeBtn, followBtn, stopBtn),
+    ownerNote,
+    h(
+      "div",
+      { class: "row row-end quick-row" },
+      field(t("quick.progress"), tierSel),
+      progressBtn,
+      field(t("quick.obtain"), obtainItem),
+      field(t("quick.count"), obtainCount),
+      obtainBtn,
+    ),
+    quickNote,
+  );
 
   // ----------------------------------------------------------------
   // Status
@@ -238,7 +373,8 @@ export function render(root, params) {
           catalog,
           bot: bot(),
           withMode: true,
-          primary: true,
+          // The page's one primary action is "throw away junk" above.
+          primary: false,
           submitLabel: t("form.addTask"),
           onSubmit: (task, mode) => api.post(`/api/bots/${enc(id)}/tasks`, { task, mode }),
         }),
@@ -377,6 +513,7 @@ export function render(root, params) {
   }
 
   function renderEvents() {
+    renderPlugin();
     if (eventsError) {
       mount(eventsHost, errorBox(eventsError, "ui.eventsFailed"));
       return;
@@ -397,45 +534,159 @@ export function render(root, params) {
   }
 
   // ----------------------------------------------------------------
-  // Microsoft login
+  // Microsoft login (HeadlessMC device code, SPEC §5.4)
   // ----------------------------------------------------------------
-  function renderMicrosoft(result) {
+  let ms = null; // GET /microsoft-login view
+  let msError = null;
+  let msStartError = null; // the last POST failure (not_installed, timeout, ...)
+  let msPending = false; // POST in flight: HeadlessMC prints the code within 45 s
+  let msExpiresAt = 0;
+  let msTimer = null;
+  let msKey = null;
+  const msLeft = h("span", { class: "num" });
+
+  const msActive = () => ms && (ms.state === "starting" || ms.state === "waiting");
+
+  async function msRefresh() {
+    clearTimeout(msTimer);
+    if ((bot()?.account?.type || "offline") !== "microsoft") {
+      renderMicrosoft();
+      return;
+    }
+    try {
+      ms = await api.get(`/api/bots/${enc(id)}/microsoft-login`);
+      msError = null;
+    } catch (e) {
+      msError = e;
+    }
+    renderMicrosoft();
+    if (msActive()) msTimer = setTimeout(msRefresh, MS_POLL_MS);
+  }
+
+  function msCountdown() {
+    const end = msExpiresAt || (isNum(ms?.startedAt) ? ms.startedAt + MS_LOGIN_TTL_SEC * 1000 : 0);
+    if (!end) {
+      msLeft.textContent = "";
+      return;
+    }
+    const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+    msLeft.textContent = t("bot.msLeft", { left: duration(left), max: duration(MS_LOGIN_TTL_SEC) });
+    msLeft.classList.toggle("num-warn", left < 120);
+  }
+
+  function renderMicrosoft() {
     const b = bot();
     const type = b?.account?.type || "offline";
     if (type !== "microsoft") {
+      msKey = "offline";
       mount(msHost, h("p", { class: "small" }, t("bot.msOffline")));
       return;
     }
-    // The manager answers 400 "unsupported" for Microsoft accounts until phase 2.
-    if (!result) {
-      mount(msHost, h("p", { class: "small st-warn" }, t("bot.msUnsupported")));
-      return;
-    }
-    const startBtn = btn(t("bot.msStart"), (e) =>
-      busy(e.currentTarget, async () => {
-        const r = await api.post(`/api/bots/${enc(id)}/microsoft-login`);
-        renderMicrosoft({ url: r?.url, code: r?.code, waiting: true });
-      }),
+    const st = msPending ? "starting" : ms?.state || "idle";
+    const key = [st, ms?.code, ms?.hasAccount, ms?.account, ms?.error, msError?.code, msStartError?.code].join("|");
+    msCountdown();
+    if (key === msKey) return; // only the countdown moved; keep focus on the buttons
+    msKey = key;
+    const startBtn = btn(
+      ms?.hasAccount ? t("bot.msRelogin") : t("bot.msStart"),
+      async (e) => {
+        const target = e.currentTarget;
+        msPending = true;
+        msStartError = null;
+        renderMicrosoft();
+        await busy(target, async () => {
+          try {
+            const r = await api.post(`/api/bots/${enc(id)}/microsoft-login`);
+            msExpiresAt = isNum(r?.expiresInSec) ? Date.now() + r.expiresInSec * 1000 : 0;
+            ms = { ...(ms || {}), ...r, state: r?.state || "waiting" };
+          } catch (err) {
+            msStartError = err; // e.g. 409 not_installed: shown in the section, not only as a toast
+            throw err;
+          } finally {
+            msPending = false;
+          }
+        });
+        msRefresh();
+      },
+      { small: false, disabled: msPending || st === "starting" || st === "waiting" },
     );
-    const parts = [h("p", { class: "small" }, t("bot.msText")), h("div", { class: "row" }, startBtn)];
-    if (result && result.url) {
-      parts.push(
-        spec([
-          [t("bot.msUrl"), h("a", { href: result.url, target: "_blank", rel: "noopener noreferrer" }, result.url)],
-          [t("bot.msCode"), h("span", { class: "code-big" }, result.code || "")],
-        ]),
-        h("p", { class: "small", "aria-live": "polite" }, result.waiting ? t("bot.msWaiting") : ""),
+    const cancelBtn = btn(
+      t("bot.msCancel"),
+      (e) =>
+        busy(e.currentTarget, async () => {
+          ms = await api.del(`/api/bots/${enc(id)}/microsoft-login`);
+          msExpiresAt = 0;
+          msRefresh();
+        }),
+      { small: false },
+    );
+    const pairs = [
+      [t("bot.msState"), h("span", { class: st === "ok" ? "st-ok" : st === "failed" ? "st-bad" : st === "waiting" || st === "starting" ? "st-warn" : "" }, tid("msState", st))],
+      [
+        t("bot.msSaved"),
+        ms?.hasAccount
+          ? h("span", { class: "st-ok" }, ms.account ? t("bot.msSavedAs", { account: ms.account }) : t("set.yes"))
+          : h("span", { class: "st-warn" }, t("bot.msNotSaved")),
+      ],
+    ];
+    if (ms?.url && (st === "waiting" || st === "starting")) {
+      pairs.push(
+        [t("bot.msUrl"), h("a", { href: ms.url, target: "_blank", rel: "noopener noreferrer" }, ms.url)],
+        [t("bot.msCode"), h("span", { class: "code-big" }, ms.code || "")],
+        [t("bot.msExpires"), msLeft],
       );
     }
-    if (result && result.done) {
-      parts.push(h("p", { class: result.ok ? "st-ok" : "st-bad", role: "status" }, result.ok ? t("bot.msOk") : `${t("bot.msFailed")}: ${result.message || ""}`));
-    }
-    mount(msHost, ...parts);
+    if (st === "failed" && ms?.error) pairs.push([t("bot.msError"), h("span", { class: "st-bad" }, ms.error)]);
+    mount(
+      msHost,
+      h("p", { class: "small" }, t("bot.msText")),
+      msError ? errorBox(msError) : null,
+      msStartError ? errorBox(msStartError, "bot.msStartFailed") : null,
+      spec(pairs),
+      msPending ? h("p", { class: "small", role: "status" }, t("bot.msWaitCode")) : null,
+      st === "waiting" ? h("p", { class: "small", role: "status" }, t("bot.msWaiting")) : null,
+      !ms?.hasAccount ? h("p", { class: "small dim" }, t("bot.msNeeded")) : null,
+      h("div", { class: "row-sm" }, startBtn, st === "waiting" || st === "starting" ? cancelBtn : null),
+    );
   }
 
   // ----------------------------------------------------------------
-  // Companion plugin
+  // Companion plugin (SPEC §7)
   // ----------------------------------------------------------------
+  function renderPlugin() {
+    const p = bot()?.plugin || {};
+    const parts = [];
+    if (p.welcome) {
+      const d = p.welcome.d || {};
+      parts.push(
+        h(
+          "p",
+          { class: "small" },
+          h("span", { class: "st-ok" }, t("bot.pluginWelcome")),
+          Array.isArray(d.features) && d.features.length ? ` · ${t("bot.pluginFeatures", { list: d.features.join(", ") })}` : "",
+          d.server ? ` · ${d.server}` : "",
+          isNum(p.welcome.receivedAt) ? [" · ", timeEl(p.welcome.receivedAt)] : null,
+        ),
+      );
+    } else if (p.reject) {
+      parts.push(h("p", { class: "small st-bad" }, t("bot.pluginRejected", { reason: p.reject.d?.reason || "" })));
+    } else {
+      parts.push(h("p", { class: "small dim" }, t("bot.pluginSilent")));
+    }
+    const last = events.filter((ev) => String(ev.kind || "").startsWith("plugin_")).slice(0, PLUGIN_EVENTS_SHOWN);
+    parts.push(h("p", { class: "label" }, t("bot.pluginLast", { n: last.length })));
+    parts.push(
+      last.length
+        ? h(
+            "ul",
+            { class: "list small plugin-events" },
+            last.map((ev) => h("li", null, timeEl(ev.time), " ", levelEl(ev.level), " ", eventText(ev))),
+          )
+        : h("p", { class: "small dim" }, t("bot.pluginNoEvents")),
+    );
+    mount(pluginHost, ...parts);
+  }
+
   const rbMinutes = h("input", { type: "number", min: 1, max: 10080, step: 1, value: "10", inputmode: "numeric" });
   const rbTarget = h("input", { type: "text", autocomplete: "off", spellcheck: "false" });
   const companionNote = h("p", { class: "small", "aria-live": "polite" });
@@ -465,6 +716,7 @@ export function render(root, params) {
     "div",
     { class: "stack" },
     h("p", { class: "small" }, t("bot.companionText")),
+    pluginHost,
     h("div", { class: "fields" }, field(t("bot.minutes"), rbMinutes, { hint: t("bot.minutesHint") }), field(t("bot.target"), rbTarget, { hint: t("bot.targetHint") })),
     h(
       "div",
@@ -486,6 +738,7 @@ export function render(root, params) {
       "div",
       { class: "stack-lg" },
       h("div", { class: "stack-sm" }, h("p", null, h("a", { href: "#/bots" }, t("bot.back"))), title, subtitle, actions),
+      sec("quick.title", quickEl),
       h(
         "div",
         { class: "cols" },
@@ -502,7 +755,17 @@ export function render(root, params) {
   renderHeader();
   renderStatus();
   renderQueue();
-  renderMicrosoft();
+  renderOwnerNote();
+  fillProfiles();
+  renderPlugin();
+  msRefresh();
+  // Keep profiles and the owner name come from the settings; the catalog gives the defaults.
+  Promise.all([loadSettings().catch(() => null), loadCatalog().catch(() => null)]).then(() => {
+    fillProfiles();
+    renderOwnerNote();
+    if (!tierSel.dataset.touched) tierSel.value = stepDefault("progress", "tier") || tierSel.value;
+  });
+  tierSel.addEventListener("change", () => (tierSel.dataset.touched = "1"));
   mountForm();
   loadLog();
   loadEvents();
@@ -512,9 +775,13 @@ export function render(root, params) {
   const refreshStatus = throttle(() => {
     renderHeader();
     renderStatus();
+    renderPlugin();
   }, 500);
 
   return {
+    destroy() {
+      clearTimeout(msTimer);
+    },
     update(type, data) {
       const forMe = data && (data.botId === id || data.id === id || data.status?.botId === id);
       if (type === "snapshot") {
@@ -538,9 +805,7 @@ export function render(root, params) {
         events.unshift(data);
         if (events.length > EVENTS_SHOWN) events.length = EVENTS_SHOWN;
         renderEvents();
-        if (data.kind && /^microsoft/.test(data.kind)) {
-          renderMicrosoft({ done: true, ok: data.level !== "error" && data.data?.ok !== false, message: data.message });
-        }
+        if (data.kind && /^microsoft_login/.test(data.kind)) msRefresh();
       }
     },
   };

@@ -3,12 +3,33 @@
 // form built from them. Every field returns {value} or {error}; nothing is
 // sent until every field validates.
 
-import { h, field, nextId, select, btn } from "./dom.js";
+import { h, field, nextId, select, btn, table } from "./dom.js";
 import { t } from "./i18n.js";
 import { store, botList, botsWithPos, loadWorld, serverOf } from "./store.js";
-import { posText, dimLabel, shortId } from "./format.js";
+import { posText, dimLabel, argsSummary } from "./format.js";
+import { posInputs, botPosButton, knownContainerSelect, refPicker } from "./refpick.js";
+
+export { botPosButton };
 
 export const DIMS = ["minecraft:overworld", "minecraft:the_nether", "minecraft:the_end"];
+
+// Farm animals offered for "animal" fields (any entity id is accepted).
+const ANIMALS = ["minecraft:cow", "minecraft:sheep", "minecraft:pig", "minecraft:chicken", "minecraft:goat", "minecraft:rabbit", "minecraft:mooshroom", "minecraft:horse", "minecraft:llama", "minecraft:turtle", "minecraft:bee"];
+
+// Argument types that take position references (SPEC §5.7e).
+const REF_TYPES = new Set(["pos", "box", "container", "containers"]);
+
+// Container roles a delivery may target besides sorted:<category> (SettingsSchema.ORDER_ROLES).
+export const ORDER_ROLES = ["storage", "supply", "kit", "fuel", "inbox"];
+
+/** Options for "into" fields: roles, then sorting categories from the autopilot settings. */
+export function intoOptions() {
+  const cats = (store.settings?.config?.autopilot?.categories || []).map((c) => c.name).filter(Boolean);
+  return [
+    ...ORDER_ROLES.map((r) => ({ value: r, label: t(`containerRole.${r}`, null, r) })),
+    ...cats.map((c) => ({ value: `sorted:${c}`, label: `${t("containerRole.sorted")}: ${c}` })),
+  ];
+}
 
 // Used when the catalog lists manager steps by name only (SPEC §5.5).
 const STEP_ARGS = {
@@ -73,6 +94,10 @@ export function refreshDatalists() {
   const owner = store.settings?.config?.general?.ownerPlayer;
   if (owner) names.add(owner);
   players.replaceChildren(...[...names].sort().map((n) => h("option", { value: n })));
+
+  if (!document.getElementById("dl-animals")) {
+    document.body.append(h("datalist", { id: "dl-animals" }, ANIMALS.map((a) => h("option", { value: a }))));
+  }
 }
 
 // ------------------------------------------------------------------
@@ -86,8 +111,17 @@ export function refreshDatalists() {
 export function argField(arg, ctx) {
   const type = arg.type || "string";
   const label = t(ctx.labelKey(arg.name), null, arg.name);
-  const make = RENDERERS[type] || (arg.name === "dim" ? RENDERERS.dim : RENDERERS.json);
+  let make = RENDERERS[type] || (arg.name === "dim" ? RENDERERS.dim : RENDERERS.json);
+  if (arg.refs && REF_TYPES.has(type)) make = refPicker;
+  else if (arg.name === "dim" && type === "enum") make = dimRenderer;
+  else if (arg.name === "animal" && (type === "string" || type === "item")) make = textRenderer({ list: "dl-animals" });
+  else if (arg.name === "into" && type === "string") make = intoRenderer;
   const f = make(arg, ctx);
+  // A composite control has no <label for>; its first input carries the name.
+  if (f.control && !/^(INPUT|SELECT|TEXTAREA)$/.test(f.control.tagName)) {
+    const inner = f.control.querySelector("select,input:not([type=checkbox]),textarea");
+    if (inner && !inner.getAttribute("aria-label")) inner.setAttribute("aria-label", label);
+  }
   const err = h("span", { class: "field-error", "aria-live": "polite" });
   const hintParts = [];
   if (arg.hint) hintParts.push(arg.hint);
@@ -182,47 +216,17 @@ function listRenderer() {
   };
 }
 
-function posInputs() {
-  const x = h("input", { type: "number", step: "1", inputmode: "numeric", "aria-label": "x", placeholder: "x" });
-  const y = h("input", { type: "number", step: "1", inputmode: "numeric", "aria-label": "y", placeholder: "y" });
-  const z = h("input", { type: "number", step: "1", inputmode: "numeric", "aria-label": "z", placeholder: "z" });
-  const wrap = h("div", { class: "pos-inputs" }, x, y, z);
+function intoRenderer(arg) {
+  const opts = intoOptions();
+  const sel = select(opts, arg.default || "storage");
   return {
-    wrap,
-    get() {
-      const vals = [x, y, z].map((i) => i.value.trim());
-      if (vals.every((v) => v === "")) return { value: undefined };
-      if (vals.some((v) => v === "")) return { error: t("form.err.posPartial") };
-      const n = vals.map(Number);
-      if (n.some((v) => !Number.isInteger(v))) return { error: t("form.err.int") };
-      return { value: { x: n[0], y: n[1], z: n[2] } };
-    },
-    set(p) {
-      x.value = p && p.x !== undefined ? String(Math.floor(p.x)) : "";
-      y.value = p && p.y !== undefined ? String(Math.floor(p.y)) : "";
-      z.value = p && p.z !== undefined ? String(Math.floor(p.z)) : "";
+    control: sel,
+    get: () => ({ value: sel.value || undefined }),
+    set(v) {
+      if (v && ![...sel.options].some((o) => o.value === v)) sel.append(h("option", { value: v }, v));
+      sel.value = v || "storage";
     },
   };
-}
-
-/** Button that copies the reference bot's block position into `set`. */
-export function botPosButton(ctx, set, labelKey = "form.useBotPos", onDim) {
-  const b = btn(t(labelKey), () => {
-    const bot = ctx.refBot && ctx.refBot();
-    const pos = bot?.status?.pos;
-    if (!pos) {
-      b.title = t("form.noBotPos");
-      note.textContent = t("form.noBotPos");
-      return;
-    }
-    note.textContent = t("form.tookPos", { bot: bot.username || bot.id, pos: posText(pos) });
-    set({ x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) });
-    // Read at click time: forms assign ctx.onBotDim after their fields exist.
-    const dimCb = onDim || ctx.onBotDim;
-    if (dimCb && bot.status.dim) dimCb(bot.status.dim);
-  });
-  const note = h("span", { class: "field-hint", "aria-live": "polite" });
-  return h("span", { class: "row-sm" }, b, note);
 }
 
 function posRenderer(arg, ctx) {
@@ -276,11 +280,13 @@ function boolRenderer() {
   };
 }
 
-function enumRenderer(arg) {
+function enumRenderer(arg, ctx) {
   const values = Array.isArray(arg.enum) ? arg.enum : [];
   const opts = [];
   if (!arg.required) opts.push({ value: "", label: t("form.notSet") });
-  const labelOf = arg.labelOf || ((v) => t(`enum.${v}`, null, String(v)));
+  // The catalog labels options as "<argument label key>.option.<value>".
+  const base = ctx && ctx.labelKey ? ctx.labelKey(arg.name) : "";
+  const labelOf = arg.labelOf || ((v) => t(`${base}.option.${v}`, null, t(`enum.${v}`, null, String(v))));
   for (const v of values) opts.push({ value: v, label: labelOf(v) });
   const sel = select(opts, arg.required && values.length ? values[0] : "");
   return {
@@ -334,37 +340,6 @@ function itemCountsRenderer(arg) {
       area.value = list.map((x) => `${x.item} ${x.count === -1 ? "all" : x.count}`).join("\n");
     },
   };
-}
-
-function containerOptions(ctx) {
-  const sid = ctx.serverId && ctx.serverId();
-  const w = sid ? store.worlds.get(sid) : null;
-  const list = w ? w.containers : [];
-  return list.map((c) => ({
-    value: JSON.stringify(c.pos),
-    label: `${c.label || shortId(c.block) || ""} ${posText(c.pos)} ${dimLabel(c.dim)}${c.roles?.length ? " · " + c.roles.join(", ") : ""}`,
-  }));
-}
-
-function knownContainerSelect(ctx, onPick) {
-  const sel = h("select", { "aria-label": t("form.knownContainer") });
-  const fill = () => {
-    const opts = containerOptions(ctx);
-    sel.replaceChildren(
-      h("option", { value: "" }, opts.length ? t("form.pickContainer") : t("form.noContainers")),
-      ...opts.map((o) => h("option", { value: o.value }, o.label)),
-    );
-  };
-  fill();
-  const sid = ctx.serverId && ctx.serverId();
-  if (sid && !store.worlds.has(sid)) loadWorld(sid).then(fill, () => {});
-  sel.addEventListener("focus", fill);
-  sel.addEventListener("change", () => {
-    if (!sel.value) return;
-    onPick(JSON.parse(sel.value));
-    sel.value = "";
-  });
-  return sel;
 }
 
 function containerRenderer(arg, ctx) {
@@ -631,9 +606,16 @@ export function taskForm(opts) {
     if (!e) return;
     const prefix = e.step ? `step.${e.type}.arg.` : `task.${e.type}.arg.`;
     ctx.labelKey = (name) => prefix + name;
+    ctx.what = e.type;
+    // goto takes either a pos (reference or x y z behind "manual") or loose x/y/z.
+    const posRef = e.args.some((a) => a.name === "pos" && a.refs);
+    const loose = posRef ? new Set(["x", "y", "z"]) : new Set();
     for (const a of e.args) {
-      const f = argField(a, ctx);
+      if (loose.has(a.name)) continue;
+      // Without the loose x/z the pos is the only way to say where: it becomes required.
+      const f = argField(posRef && a.name === "pos" ? { ...a, required: true } : a, ctx);
       if (initialArgs && initialArgs[a.name] !== undefined) f.set(initialArgs[a.name]);
+      else if (a.name === "pos" && posRef && initialArgs && initialArgs.x !== undefined) f.set({ x: initialArgs.x, y: initialArgs.y ?? 64, z: initialArgs.z });
       fields.push(f);
       argsBox.append(f.el);
     }
@@ -734,4 +716,137 @@ export function botPicker(selected = [], { onlyIds } = {}) {
       for (const b of boxes) b.checked = ids.includes(b.value);
     },
   };
+}
+
+/**
+ * "Which bots" for schedules and rules: any free bot, every online bot, or
+ * the listed ones. Returns {el, get() -> "any"|"all"|[ids] | {error}, set(v)}.
+ */
+export function botsChoice(initial = "any") {
+  const name = nextId("bots");
+  const radios = ["any", "all", "list"].map((v) => h("input", { type: "radio", name, value: v }));
+  const picker = botPicker(Array.isArray(initial) ? initial : []);
+  const sync = () => (picker.el.hidden = !radios[2].checked);
+  for (const r of radios) r.addEventListener("change", sync);
+  const set = (v) => {
+    const mode = Array.isArray(v) ? "list" : v === "all" ? "all" : "any";
+    for (const r of radios) r.checked = r.value === mode;
+    if (Array.isArray(v)) picker.set(v);
+    sync();
+  };
+  set(initial);
+  return {
+    el: h(
+      "fieldset",
+      null,
+      h("legend", null, t("auto.bots")),
+      h("div", { class: "row" }, radios.map((r) => h("label", { class: "check" }, r, h("span", null, t(`auto.bots.${r.value}`))))),
+      picker.el,
+    ),
+    get() {
+      if (radios[0].checked) return { value: "any" };
+      if (radios[1].checked) return { value: "all" };
+      const ids = picker.get();
+      return ids.length ? { value: ids } : { error: t("bots.noSelection") };
+    },
+    set,
+  };
+}
+
+/**
+ * Ordered list of task templates and manager steps with an add / edit form,
+ * shared by scenarios, schedules and rules. Returns
+ * {listEl, formEl, steps() -> [template], count()}.
+ */
+export function stepsEditor({ catalog, steps = [], onChange }) {
+  const list = steps.map((s) => structuredClone(s));
+  let editing = -1;
+  const listEl = h("div");
+  const formEl = h("div");
+  const changed = () => {
+    if (onChange) onChange(list);
+    renderList();
+    renderForm();
+  };
+
+  function renderList() {
+    if (!list.length) {
+      listEl.replaceChildren(h("p", { class: "empty" }, t("scen.noSteps")));
+      return;
+    }
+    const rows = list.map((st, i) =>
+      h(
+        "tr",
+        { "aria-selected": String(i === editing) },
+        h("td", { class: "num" }, String(i + 1)),
+        h("td", null, h("span", { class: "strong" }, templateTitle(st)), st.label ? h("div", { class: "small dim" }, st.label) : null),
+        h("td", { class: "wrap-cell mono" }, argsSummary(st.args) || t("bot.noArgs")),
+        h("td", { class: "num" }, st.timeoutSec ? `${st.timeoutSec} ${t("unit.s")}` : t("scen.noTimeout")),
+        h(
+          "td",
+          { class: "actions" },
+          h(
+            "div",
+            { class: "row-sm" },
+            btn(t("bot.up"), () => move(i, -1), { disabled: i === 0, ariaLabel: t("bot.upAria", { n: i + 1 }) }),
+            btn(t("bot.down"), () => move(i, 1), { disabled: i === list.length - 1, ariaLabel: t("bot.downAria", { n: i + 1 }) }),
+            btn(t("scen.editStep"), () => edit(i), { ariaLabel: t("scen.editStepAria", { n: i + 1 }) }),
+            btn(t("bot.remove"), () => remove(i), { ariaLabel: t("bot.removeAria", { n: i + 1 }) }),
+          ),
+        ),
+      ),
+    );
+    listEl.replaceChildren(table([t("bot.qcol.n"), t("scen.col.step"), t("bot.qcol.args"), t("scen.col.timeout"), t("bot.qcol.actions")], rows));
+  }
+
+  function move(i, d) {
+    const j = i + d;
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    if (editing === i) editing = j;
+    changed();
+  }
+
+  function remove(i) {
+    list.splice(i, 1);
+    if (editing === i) editing = -1;
+    else if (editing > i) editing--;
+    changed();
+  }
+
+  function edit(i) {
+    editing = i;
+    renderList();
+    renderForm();
+    formEl.querySelector("select")?.focus();
+  }
+
+  function renderForm() {
+    const isEdit = editing >= 0;
+    const form = taskForm({
+      catalog,
+      withMode: false,
+      primary: false,
+      initial: isEdit ? list[editing] : null,
+      submitLabel: isEdit ? t("scen.saveStep") : t("scen.addStep"),
+      onSubmit: async (tpl) => {
+        if (isEdit) list[editing] = tpl;
+        else list.push(tpl);
+        editing = -1;
+        changed();
+      },
+    });
+    const cancel = isEdit
+      ? btn(t("ui.cancel"), () => {
+          editing = -1;
+          renderList();
+          renderForm();
+        })
+      : null;
+    formEl.replaceChildren(h("div", { class: "head" }, h("h3", { class: "h3" }, isEdit ? t("scen.editingStep", { n: editing + 1 }) : t("scen.addStepTitle")), cancel), form);
+  }
+
+  renderList();
+  renderForm();
+  return { listEl, formEl, steps: () => list, count: () => list.length };
 }

@@ -14,6 +14,7 @@ import * as worldScreen from "./js/screens/world.js";
 import * as kitsScreen from "./js/screens/kits.js";
 import * as settingsScreen from "./js/screens/settings.js";
 import * as eventsScreen from "./js/screens/events.js";
+import * as automationScreen from "./js/screens/automation.js";
 
 const ROUTES = [
   { re: /^\/bots\/([^/]+)$/, nav: "bots", screen: botScreen, keys: ["id"] },
@@ -22,6 +23,7 @@ const ROUTES = [
   { re: /^\/projects\/?$/, nav: "projects", screen: projectsScreen, keys: [] },
   { re: /^\/projects\/new$/, nav: "projects", screen: projectsScreen, keys: [], extra: { create: true } },
   { re: /^\/projects\/([^/]+)$/, nav: "projects", screen: projectScreen, keys: ["id"] },
+  { re: /^\/automation(?:\/([^/]+))?(?:\/([^/]+))?$/, nav: "automation", screen: automationScreen, keys: ["tab", "id"] },
   { re: /^\/world(?:\/([^/]+))?$/, nav: "world", screen: worldScreen, keys: ["serverId"] },
   { re: /^\/kits(?:\/([^/]+))?$/, nav: "kits", screen: kitsScreen, keys: ["id"] },
   { re: /^\/settings(?:\/([^/]+))?$/, nav: "settings", screen: settingsScreen, keys: ["tab"] },

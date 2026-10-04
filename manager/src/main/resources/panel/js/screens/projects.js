@@ -1,56 +1,33 @@
-// Projects: list with progress, and the create form per project kind.
+// Projects: list with progress per kind, and the create form generated
+// from the catalog's projectKinds (SPEC §5.7). Places are picked as
+// references ("find automatically", "where I look", an area) instead of
+// coordinates; the manager resolves them when the project is saved.
 
 import { api, enc, listOf } from "../api.js";
-import { h, mount, btn, busy, toast, confirmDialog, errorBox, empty, table, field, select, throttle, nextId } from "../dom.js";
+import { h, mount, btn, busy, toast, confirmDialog, errorBox, errorText, empty, table, field, select, throttle, nextId } from "../dom.js";
 import { t, has, tid } from "../i18n.js";
-import { store, projectList, loadCatalog, loadWorld, serverName } from "../store.js";
+import { store, projectList, loadCatalog, loadWorld, loadSettings, serverName } from "../store.js";
 import { num, noData, isNum, durationEl } from "../format.js";
 import { argField, collect, refBotSelect, botPicker } from "../forms.js";
-import { projectProgress } from "./project.js";
+import { projectProgress, kindShort } from "./project.js";
 
-export const KINDS = ["build", "gather", "clear", "farm", "ranch", "sort", "smelt"];
+function kindDef(catalog, kind) {
+  return (catalog?.projectKinds || []).find((k) => (k.kind || k.type) === kind) || null;
+}
 
-const DIM = { name: "dim", type: "dim", required: true, default: "minecraft:overworld" };
-
-// Used when /api/catalog has no `projectKinds` entry for a kind.
-const KIND_FIELDS = {
-  build: [
-    { name: "origin", type: "pos", required: true },
-    DIM,
-    { name: "rotation", type: "enum", enum: [0, 90, 180, 270], required: true, default: 0 },
-    { name: "mirror", type: "enum", enum: ["none", "front_back", "left_right"], required: true, default: "none" },
-    { name: "supply", type: "containers", required: true },
-  ],
-  gather: [DIM, { name: "quotas", type: "item_counts", map: true, required: true }, { name: "storage", type: "containers", required: true }],
-  clear: [DIM, { name: "box", type: "box", required: true }, { name: "deposit", type: "containers" }],
-  farm: [DIM, { name: "box", type: "box", required: true }, { name: "deposit", type: "containers", required: true }],
-  ranch: [
-    DIM,
-    { name: "box", type: "box", required: true },
-    { name: "animal", type: "string", required: true },
-    { name: "food", type: "item" },
-    { name: "keep", type: "int", min: 2, default: 4 },
-    { name: "max", type: "int", min: 2, default: 20 },
-    { name: "deposit", type: "containers" },
-  ],
-  sort: [DIM, { name: "inbox", type: "containers", required: true }],
-  smelt: [
-    DIM,
-    { name: "furnaces", type: "containers", required: true },
-    { name: "input", type: "items", required: true },
-    { name: "fuel", type: "item", required: true, default: "minecraft:coal" },
-    { name: "output", type: "containers" },
-  ],
-};
-
-function kindFields(catalog, kind) {
-  const fromCatalog = (catalog?.projectKinds || []).find((k) => (k.kind || k.type) === kind);
-  return fromCatalog && Array.isArray(fromCatalog.args) ? fromCatalog.args : KIND_FIELDS[kind] || [];
+/**
+ * The kind's arguments as form fields. A box argument that takes references
+ * covers the old "area" name field (an area is one of its options), so the
+ * name field is left out and the box counts as required.
+ */
+export function kindFields(catalog, kind) {
+  const args = Array.isArray(kindDef(catalog, kind)?.args) ? kindDef(catalog, kind).args : [];
+  const boxRef = args.some((a) => a.name === "box" && a.refs);
+  return args.filter((a) => !(boxRef && a.name === "area")).map((a) => (boxRef && a.name === "box" ? { ...a, primary: true } : a));
 }
 
 function kindList(catalog) {
-  const fromCatalog = (catalog?.projectKinds || []).map((k) => k.kind || k.type).filter(Boolean);
-  return fromCatalog.length ? fromCatalog : KINDS;
+  return (catalog?.projectKinds || []).filter((k) => k.supported !== false).map((k) => k.kind || k.type).filter(Boolean);
 }
 
 export function statusEl(status) {
@@ -58,52 +35,7 @@ export function statusEl(status) {
   return h("span", { class: cls }, tid("pstatus", status || "draft"));
 }
 
-// Projects and the automatic planner are phase 2: the manager answers 501
-// for /api/projects*. One probe per page load decides which screen shows;
-// the full screens below stay for the planner.
-let projectsApi = null; // null = not probed yet, true = available, false = 501
-
-function phase2Note(root) {
-  mount(root, h("div", { class: "stack" }, h("h1", { class: "h1" }, t("proj.title")), h("p", { class: "prose" }, t("proj.phase2"))));
-}
-
-export function withProjectsApi(root, renderFull) {
-  if (projectsApi === true) return renderFull();
-  if (projectsApi === false) {
-    phase2Note(root);
-    return null;
-  }
-  mount(root, empty(t("ui.loading")));
-  let live = null;
-  let gone = false;
-  api.get("/api/projects").then(
-    () => {
-      projectsApi = true;
-      if (!gone) live = renderFull();
-    },
-    (e) => {
-      projectsApi = e.status !== 501;
-      if (gone) return;
-      if (projectsApi) live = renderFull();
-      else phase2Note(root);
-    },
-  );
-  return {
-    update(type, data) {
-      if (live && live.update) live.update(type, data);
-    },
-    destroy() {
-      gone = true;
-      if (live && live.destroy) live.destroy();
-    },
-  };
-}
-
 export function render(root, params, app) {
-  return withProjectsApi(root, () => renderFull(root, params, app));
-}
-
-function renderFull(root, params, app) {
   if (params.create) return createForm(root, app);
   const listHost = h("div");
 
@@ -127,8 +59,8 @@ function renderFull(root, params, app) {
         h("td", null, statusEl(p.status)),
         h("td", null, pr.total !== null ? num(pr.done, { max: pr.total, unit: pr.unit }) : noData()),
         h("td", { class: "r" }, pr.fraction !== null ? num(pr.fraction * 100, { unit: "%", digits: 1 }) : noData()),
-        h("td", { class: "r" }, isNum(pr.rate) ? num(pr.rate, { unit: t("unit.perMin"), digits: 1 }) : noData()),
-        h("td", null, isNum(pr.etaSec) ? durationEl(pr.etaSec) : p.status === "done" ? h("span", { class: "st-ok" }, t("pstatus.done")) : noData()),
+        h("td", { class: "r" }, isNum(pr.rate) ? num(pr.rate, { unit: pr.rateUnit, digits: 1 }) : noData()),
+        h("td", null, isNum(pr.etaSec) ? durationEl(pr.etaSec) : kindShort(p)),
         h("td", null, p.bots === "any" || !p.bots ? t("proj.botsAny") : num(p.bots.length, { unit: t("unit.bots") })),
         h("td", null, p.serverId ? serverName(p.serverId) : noData()),
       );
@@ -143,7 +75,7 @@ function renderFull(root, params, app) {
           t("proj.col.progress"),
           { text: "%", class: "r" },
           { text: t("proj.col.rate"), class: "r" },
-          t("proj.col.eta"),
+          t("proj.col.counters"),
           t("proj.col.bots"),
           t("proj.col.server"),
         ],
@@ -163,6 +95,14 @@ function renderFull(root, params, app) {
     ),
   );
   renderList();
+  // Summaries in /api/state may predate the last restart; one list call refreshes them.
+  api.get("/api/projects").then(
+    (d) => {
+      for (const p of listOf(d, "projects")) store.projects.set(p.id, { ...(store.projects.get(p.id) || {}), ...p });
+      renderList();
+    },
+    () => {},
+  );
   const refresh = throttle(renderList, 1000);
   return {
     update(type) {
@@ -176,27 +116,20 @@ function renderFull(root, params, app) {
 // ------------------------------------------------------------------
 function createForm(root, app) {
   const host = h("div");
-  mount(
-    root,
-    h(
-      "div",
-      { class: "stack" },
-      h("p", null, h("a", { href: "#/projects" }, t("proj.back"))),
-      h("h1", { class: "h1" }, t("proj.newTitle")),
-      host,
-    ),
-  );
+  mount(root, h("div", { class: "stack" }, h("p", null, h("a", { href: "#/projects" }, t("proj.back"))), h("h1", { class: "h1" }, t("proj.newTitle")), host));
   mount(host, empty(t("ui.loading")));
-  loadCatalog().then(
-    (catalog) => buildCreate(host, catalog, app),
+  // Settings give the owner's name and the sorting categories the pickers show.
+  Promise.all([loadCatalog(), loadSettings().catch(() => null)]).then(
+    ([catalog]) => buildCreate(host, catalog, app),
     (e) => buildCreate(host, null, app, e),
   );
   return null;
 }
 
 function buildCreate(host, catalog, app, catalogError) {
+  const kinds = kindList(catalog);
   const nameIn = h("input", { type: "text", maxlength: 80, required: true });
-  const kindSel = select(kindList(catalog).map((k) => ({ value: k, label: tid("kind", k) })), "build");
+  const kindSel = select(kinds.map((k) => ({ value: k, label: tid("kind", k) })), kinds[0] || "build");
   const servers = store.servers;
   const serverSel = select(
     servers.length ? servers.map((s) => ({ value: s.id, label: s.name || s.id })) : [{ value: "", label: t("proj.noServers") }],
@@ -206,7 +139,12 @@ function buildCreate(host, catalog, app, catalogError) {
   const anyRadio = h("input", { type: "radio", name: botsMode, value: "any", checked: true });
   const subsetRadio = h("input", { type: "radio", name: botsMode, value: "subset" });
   const picker = botPicker([]);
+  const syncBots = () => (picker.el.hidden = !subsetRadio.checked);
+  anyRadio.addEventListener("change", syncBots);
+  subsetRadio.addEventListener("change", syncBots);
+  syncBots();
   const ref = refBotSelect();
+  const startIn = h("input", { type: "checkbox", checked: true });
   const kindHost = h("div", { class: "stack" });
   const kindNote = h("p", { class: "small" });
   const note = h("p", { class: "field-hint", "aria-live": "polite" });
@@ -217,10 +155,12 @@ function buildCreate(host, catalog, app, catalogError) {
     labelKey: (name) => (has(`project.${kindSel.value}.arg.${name}`) ? `project.${kindSel.value}.arg.${name}` : `pfield.${name}`),
     refBot: () => ref.bot(),
     serverId: () => serverSel.value || null,
+    what: `project:${kindSel.value}`,
   };
 
   const buildKind = () => {
     const kind = kindSel.value;
+    ctx.what = `project:${kind}`;
     kindNote.textContent = t(`kind.${kind}.desc`, null, "");
     fields = kindFields(catalog, kind).map((a) => argField(a, ctx));
     const dimField = fields.find((f) => f.name === "dim");
@@ -230,7 +170,7 @@ function buildCreate(host, catalog, app, catalogError) {
   };
   kindSel.addEventListener("change", buildKind);
   serverSel.addEventListener("change", () => {
-    if (serverSel.value) loadWorld(serverSel.value).catch(() => {});
+    if (serverSel.value) loadWorld(serverSel.value).then(buildKind, buildKind);
   });
   if (serverSel.value) loadWorld(serverSel.value).catch(() => {});
   buildKind();
@@ -254,8 +194,15 @@ function buildCreate(host, catalog, app, catalogError) {
         picker.el,
       ),
     ),
-    h("section", { class: "section" }, h("h2", { class: "h2" }, t("proj.kindSettings")), h("div", { class: "fields" }, ref.el), kindHost),
-    h("div", { class: "row" }, submit, note),
+    h(
+      "section",
+      { class: "section" },
+      h("h2", { class: "h2" }, t("proj.kindSettings")),
+      h("p", { class: "small" }, t("proj.placeText")),
+      kindHost,
+      h("details", null, h("summary", { class: "small" }, t("proj.refBotMore")), h("div", { class: "fields sub" }, ref.el)),
+    ),
+    h("div", { class: "row" }, submit, h("label", { class: "check" }, startIn, h("span", null, t("proj.startNow"))), note),
   );
 
   form.addEventListener("submit", async (e) => {
@@ -295,17 +242,23 @@ function buildCreate(host, catalog, app, catalogError) {
       }
     }
     await busy(submit, async () => {
-      const created = await api.post("/api/projects", { name, kind: kindSel.value, serverId: serverSel.value, bots, config });
-      toast("info", t("proj.created"));
-      if (created && created.id) app.navigate(`/projects/${created.id}`);
-      else app.navigate("/projects");
+      note.textContent = t("proj.resolving");
+      try {
+        const created = await api.post("/api/projects", { name, kind: kindSel.value, serverId: serverSel.value, bots, config, start: startIn.checked });
+        toast("info", t("proj.created"));
+        app.navigate(created && created.id ? `/projects/${created.id}` : "/projects");
+      } catch (err) {
+        // 400 ref_no_owner / ref_auto_none / validation: say which part failed next to the button.
+        note.textContent = errorText(err);
+        throw err;
+      }
     });
   });
 
   mount(host, form);
 }
 
-/** Schematic chooser: list from /api/schematics, upload, delete. */
+/** Schematic chooser: list from /api/schematics, upload (POST ?name=), delete. */
 function schematicPicker() {
   const sel = h("select", { required: true });
   const info = h("p", { class: "small" });
@@ -316,7 +269,8 @@ function schematicPicker() {
   const describe = () => {
     const s = list.find((x) => x.name === sel.value);
     if (!s) {
-      info.textContent = list.length ? "" : t("proj.noSchematics");
+      // An empty list already says so in the select itself.
+      info.textContent = "";
       return;
     }
     const d = s.dims || s.size || {};
@@ -340,6 +294,7 @@ function schematicPicker() {
         ...list.map((s) => h("option", { value: s.name }, s.name)),
       );
       if (selectName) sel.value = selectName;
+      else if (list.length === 1) sel.value = list[0].name;
       describe();
     } catch (e) {
       info.replaceChildren(errorBox(e, "proj.schematicsFailed"));
@@ -360,6 +315,10 @@ function schematicPicker() {
       await load(res?.name || file.name);
     }),
   );
+  // Picking a file is the intent to use it: upload right away.
+  fileIn.addEventListener("change", () => {
+    if (fileIn.files && fileIn.files[0]) upBtn.click();
+  });
   const delBtn = btn(t("proj.deleteSchematic"), async (e) => {
     const target = e.currentTarget;
     if (!sel.value) return;

@@ -2,7 +2,7 @@
 // protected zones, deaths. Every edit is saved with PUT /api/world/{id}.
 
 import { api, enc } from "../api.js";
-import { h, mount, btn, busy, toast, confirmDialog, errorBox, empty, table, field, select, dialog } from "../dom.js";
+import { h, mount, btn, busy, toast, confirmDialog, errorBox, errorText, empty, table, field, select, dialog } from "../dom.js";
 import { t, tid } from "../i18n.js";
 import { store, botList, loadWorld, serverOf } from "../store.js";
 import { num, noData, isNum, posText, boxText, dimLabel, shortId, timeEl } from "../format.js";
@@ -66,7 +66,8 @@ export function render(root, params, app) {
       draw();
       return true;
     } catch (e) {
-      toast("error", `${t("world.saveFailed")}: ${e.code} ${e.message || ""}`);
+      // errorText adds the panel's words for ref_no_owner / ref_no_look and the like.
+      toast("error", `${t("world.saveFailed")}: ${errorText(e)}`);
       return false;
     }
   }
@@ -127,7 +128,8 @@ export function render(root, params, app) {
         [
           { name: "name", type: "string", required: true },
           { name: "dim", type: "dim", required: true, default: "minecraft:overworld" },
-          { name: "pos", type: "pos", required: true },
+          // The manager resolves the reference when the world is saved (SPEC §5.7e).
+          { name: "pos", type: "pos", required: true, refs: true, refKinds: ["owner", "owner_look", "bot", "manual"] },
         ],
         (v) => {
           if (world.waypoints.some((w) => w.name === v.name)) return t("world.dupName");
@@ -150,7 +152,7 @@ export function render(root, params, app) {
         [
           { name: "name", type: "string", required: true },
           { name: "dim", type: "dim", required: true, default: "minecraft:overworld" },
-          { name: "box", type: "box", required: true },
+          { name: "box", type: "box", required: true, refs: true, refKinds: ["two", "manual"] },
         ],
         (v) => {
           if (world.areas.some((a) => a.name === v.name)) return t("world.dupName");
@@ -174,7 +176,7 @@ export function render(root, params, app) {
         [
           { name: "name", type: "string" },
           { name: "dim", type: "dim", required: true, default: "minecraft:overworld" },
-          { name: "box", type: "box", required: true },
+          { name: "box", type: "box", required: true, refs: true, refKinds: ["two", "manual"] },
         ],
         (v) => save((w) => w.zones.push({ name: v.name, dim: v.dim, box: v.box })),
         "world.add",

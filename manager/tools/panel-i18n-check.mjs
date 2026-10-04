@@ -21,7 +21,7 @@ const DYNAMIC = {
   conn: ["connecting", "open", "retry", "closed", "no_token"],
   mode: ["append", "front", "replace"],
   level: ["info", "warn", "error"],
-  nav: ["bots", "scenarios", "projects", "world", "kits", "settings", "events"],
+  nav: ["bots", "scenarios", "projects", "automation", "world", "kits", "settings", "events"],
   "bot.act": ["start", "stop", "restart", "kill", "connect", "disconnect"],
   "proj.act": ["start", "pause", "resume", "stop"],
   armor: ["head", "chest", "legs", "feet"],
@@ -29,8 +29,31 @@ const DYNAMIC = {
   account: ["offline", "microsoft"],
   defense: ["fight", "flee", "ignore"],
   origin: ["panel", "scenario", "project", "recovery"],
-  source: ["bot", "manager", "plugin"],
+  source: ["bot", "manager", "plugin", "storage", "mine", "craft", "smelt", "manual", "haul"],
+  work: ["build_sector", "haul", "mine", "craft", "smelt"],
+  pfield: ["origin", "dim", "rotation", "mirror", "supply"],
+  containerRole: ["storage", "supply", "kit", "fuel", "inbox", "sorted", "trash"],
   sector: ["active", "done", "pending", "blocked"],
+  pick: ["waypointLabel", "areaLabel"],
+  "pick.hint": ["none", "home", "owner", "owner_look", "bot", "waypoint", "area", "auto", "two", "manual", "known"],
+  msState: ["idle", "starting", "waiting", "ok", "failed", "cancelled"],
+  "quick.tier": ["wood", "stone", "iron", "diamond"],
+  "auto.tab": ["autopilot", "orders", "schedules", "rules", "hygiene"],
+  "auto.flag": ["supply", "sort", "idleWork", "discovery", "useFound"],
+  "auto.num": ["foodMin", "blocksMin", "toolMinDurability", "stuckSec"],
+  "auto.bots": ["any", "all", "list"],
+  "auto.priority": ["normal", "high"],
+  "auto.when": ["every", "hourly", "daily", "day", "night", "cron"],
+  "auto.trig": ["event", "containerFull", "itemBelow", "playerOnline", "healthBelow"],
+  orderState: ["ok", "active", "inspecting", "no_containers", "disabled", "error", "unknown"],
+  evk: [
+    "death", "damaged", "threat", "inventory_full", "tool_low", "food_low", "disconnected", "kicked", "joined", "task_failed", "task_done",
+    "stuck", "crashed", "link_lost", "project_blocked", "project_done", "order_blocked", "sort_full", "manual", "goal_done", "goal_failed", "plugin_rollback",
+  ],
+  "set.kp.armor": ["worn", "none"],
+  "set.kp.weapon": ["best", "none"],
+  "set.kp.tool": ["pickaxe", "axe", "shovel", "hoe", "sword", "shears"],
+  enum: ["none", "front_back", "left_right", "wood", "stone", "iron", "diamond"],
   pstatus: ["draft", "running", "paused", "done", "failed", "stopped"],
   "set.applies": ["bot_restart", "manager_restart", "reinstall"],
   error: ["network", "panel_error"],
@@ -39,7 +62,16 @@ const DYNAMIC = {
 };
 
 // String literals that look like keys but are not: storage keys, tid() prefixes, field paths.
-const NOT_KEYS = new Set(["bb.token", "bb.lang", "a.b", "runtime.state", "runtime.step", "account.type"]);
+const NOT_KEYS = new Set([
+  "bb.token",
+  "bb.lang",
+  "a.b",
+  "runtime.state",
+  "runtime.step",
+  "account.type",
+  "autopilot.signWords",
+  "autopilot.autoTrash.keepCounts",
+]);
 const KEY_RE = /^[a-z][A-Za-z0-9]*(\.[A-Za-z0-9_]+)+$/;
 
 function walk(dir, out = []) {

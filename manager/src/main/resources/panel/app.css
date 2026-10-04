@@ -553,6 +553,55 @@ textarea:hover {
   cursor: pointer;
 }
 
+/* Layout classes (.field, .row) set display; a hidden element stays hidden. */
+[hidden] {
+  display: none !important;
+}
+
+summary {
+  cursor: pointer;
+  color: var(--text-soft);
+}
+
+/* Position / box pickers: the option first, its detail under it. */
+.picker-mode {
+  width: 100%;
+}
+
+.picker-list {
+  max-height: 12rem;
+  overflow: auto;
+  padding: var(--s-2);
+  border: 1px solid var(--hairline);
+}
+
+.picker-two {
+  padding-left: var(--s-3);
+  border-left: 1px solid var(--hairline);
+}
+
+/* Quick actions: a button with its own small fields, all on one line. */
+.quick-row > .field {
+  flex: 0 1 16rem;
+}
+
+.quick-row > .field:has(input[type="number"]) {
+  flex: 0 0 auto;
+}
+
+.quick-row input[type="number"] {
+  width: 6rem;
+}
+
+.input-num {
+  width: 6rem;
+  font-family: var(--font-mono);
+}
+
+.plugin-events > li {
+  padding: var(--s-1) 0;
+}
+
 .pos-inputs {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));

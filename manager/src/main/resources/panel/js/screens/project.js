@@ -1,30 +1,101 @@
-// One project: progress, BOM, sector map, assignments, controls.
+// One project: progress and the kind's counters, BOM, sector map,
+// assignments (bot → role → work item), blocked work, controls.
 
 import { api, enc, listOf } from "../api.js";
 import { h, mount, btn, busy, confirmDialog, errorBox, empty, table, spec, throttle } from "../dom.js";
 import { t, tid } from "../i18n.js";
 import { store, serverName } from "../store.js";
-import { num, noData, isNum, durationEl, posText, dimLabel, shortId, timeEl, levelEl, argsSummary, boxText } from "../format.js";
-import { statusEl, withProjectsApi } from "./projects.js";
+import { num, noData, isNum, durationEl, posText, dimLabel, shortId, timeEl, levelEl, argsSummary, boxText, refText } from "../format.js";
+import { statusEl } from "./projects.js";
 
-/** Normalised progress numbers of any project kind. */
+/**
+ * Normalised progress numbers of any project kind (SPEC §5.7: done/total
+ * where it makes sense, else counters and a rate).
+ */
 export function projectProgress(p) {
   const pr = p.progress || {};
   const total = isNum(pr.total) ? pr.total : null;
-  const done = isNum(pr.placed) ? pr.placed : isNum(pr.done) ? pr.done : isNum(pr.correct) ? pr.correct : null;
+  const done = isNum(pr.placed) ? pr.placed : isNum(pr.done) ? pr.done : null;
   let fraction = null;
-  if (total !== null && total > 0 && done !== null) fraction = done / total;
-  else if (isNum(pr.percent)) fraction = pr.percent / 100;
+  if (isNum(pr.percent)) fraction = pr.percent / 100;
+  else if (total !== null && total > 0 && done !== null) fraction = done / total;
   else if (total === 0) fraction = 1;
-  return {
-    total,
-    done: done ?? (total !== null ? 0 : null),
-    fraction,
-    unit: p.kind === "build" || p.kind === "clear" ? t("unit.blocks") : t("unit.items"),
-    rate: pr.blocksPerMin ?? pr.ratePerMin ?? pr.rate,
-    etaSec: pr.etaSec ?? pr.eta,
-    remaining: pr.remaining,
-  };
+  let rate = null;
+  let rateUnit = null;
+  if (isNum(pr.blocksPerMin)) {
+    rate = pr.blocksPerMin;
+    rateUnit = t("unit.blocksPerMin");
+  } else if (isNum(pr.itemsPerHour)) {
+    rate = pr.itemsPerHour;
+    rateUnit = t("unit.itemsPerHour");
+  }
+  const unit = p.kind === "build" || p.kind === "clear" ? t("unit.blocks") : p.kind === "farm" ? t("unit.rounds") : t("unit.items");
+  return { total, done: done ?? (total !== null ? 0 : null), fraction, unit, rate, rateUnit, etaSec: pr.etaSec, remaining: pr.remaining };
+}
+
+const n = (v, unit, opts) => (isNum(v) ? num(v, { unit, ...opts }) : noData());
+
+/** Kind-specific counters as [label, element] pairs (null entries are skipped). */
+export function kindCounters(p) {
+  const pr = p.progress || {};
+  switch (p.kind) {
+    case "build":
+      return [
+        [t("proj.c.sectors"), isNum(pr.sectors) ? num(pr.sectorsDone ?? 0, { max: pr.sectors }) : noData()],
+        [t("proj.c.missing"), n(pr.missing, t("unit.blocks"))],
+        [t("proj.wrong"), n(pr.wrong, t("unit.blocks"), { warn: pr.wrong > 0 })],
+        [t("proj.unloaded"), n(pr.unloaded, t("unit.blocks"))],
+        pr.finalPass ? [t("proj.c.finalPass"), t("set.yes")] : null,
+      ];
+    case "clear":
+      return [[t("proj.c.slabs"), isNum(pr.slabs) ? num(pr.slabsDone ?? 0, { max: pr.slabs }) : noData()]];
+    case "farm":
+      return [
+        [t("proj.c.rounds"), isNum(pr.total) ? num(pr.rounds ?? 0, { max: pr.total }) : n(pr.rounds)],
+        [t("proj.c.harvested"), n(pr.harvested, t("unit.items"))],
+        [t("proj.c.farming"), n(pr.farmingMin, t("unit.min"))],
+      ];
+    case "ranch":
+      return [
+        [t("proj.c.population"), isNum(pr.population) ? num(pr.population, { max: pr.max, unit: t("unit.animals"), threshold: t("proj.c.keep", { n: pr.keep ?? 0 }) }) : noData("proj.c.notCounted")],
+        [t("proj.c.rounds"), n(pr.rounds)],
+        [t("proj.c.fed"), n(pr.fed, t("unit.animals"))],
+        [t("proj.c.killed"), n(pr.killed, t("unit.animals"))],
+        [t("proj.c.sheared"), n(pr.sheared, t("unit.animals"))],
+        [t("proj.c.next"), isNum(pr.nextAt) ? timeEl(pr.nextAt) : noData()],
+      ];
+    case "gather":
+      return [[t("proj.c.rounds"), n(pr.rounds)]];
+    case "sort":
+      return [
+        [t("proj.c.remaining"), n(pr.remaining, t("unit.items"))],
+        [t("proj.c.moved"), n(pr.moved, t("unit.items"))],
+        [t("proj.c.unsorted"), pr.unsorted && Object.keys(pr.unsorted).length ? h("span", { class: "mono" }, argsSummary(pr.unsorted)) : num(0)],
+      ];
+    case "smelt":
+      return [
+        [t("proj.c.inFurnaces"), n(pr.inFurnaces, t("unit.items"))],
+        [t("proj.c.remainingInputs"), n(pr.remainingInputs, t("unit.items"))],
+        [t("proj.c.furnacesBusy"), n(pr.furnacesBusy)],
+      ];
+    default:
+      return [];
+  }
+}
+
+/** One short line of counters for the project list (kinds without an ETA). */
+export function kindShort(p) {
+  const pr = p.progress || {};
+  const parts = [];
+  if (p.kind === "farm" && isNum(pr.harvested)) parts.push(`${t("proj.c.harvested")} ${pr.harvested}`);
+  if (p.kind === "ranch" && isNum(pr.population)) parts.push(`${t("proj.c.population")} ${pr.population} / ${pr.max ?? "?"}`);
+  if (p.kind === "clear" && isNum(pr.slabs)) parts.push(`${t("proj.c.slabs")} ${pr.slabsDone ?? 0} / ${pr.slabs}`);
+  if (p.kind === "sort" && isNum(pr.remaining)) parts.push(`${t("proj.c.remaining")} ${pr.remaining}`);
+  if (p.kind === "smelt" && isNum(pr.inFurnaces)) parts.push(`${t("proj.c.inFurnaces")} ${pr.inFurnaces}`);
+  if ((p.kind === "farm" || p.kind === "gather" || p.kind === "ranch") && isNum(pr.rounds)) parts.push(`${t("proj.c.rounds")} ${pr.rounds}`);
+  const blocked = Array.isArray(p.blocked) ? p.blocked.length : 0;
+  if (blocked) parts.push(t("proj.blockedN", { n: blocked }));
+  return parts.length ? h("span", { class: "small" }, parts.join(" · ")) : noData();
 }
 
 function bomRows(p) {
@@ -54,9 +125,10 @@ function sectorState(s) {
   return "pending";
 }
 
+// Build sectors and clear slabs share the map: boxes with pending / active / done / blocked.
 function sectorsOf(p) {
-  const raw = p.sectors ?? p.progress?.sectors;
-  return Array.isArray(raw) ? raw.map((s, i) => ({ ...s, index: s.index ?? s.id ?? i, st: sectorState(s) })) : [];
+  const raw = Array.isArray(p.sectors) ? p.sectors : Array.isArray(p.slabs) ? p.slabs : null;
+  return raw ? raw.map((s, i) => ({ ...s, index: s.index ?? i, st: sectorState(s) })) : [];
 }
 
 function assignmentsOf(p) {
@@ -101,7 +173,7 @@ function sectorSvg(sectors) {
     const rect = h("svg:rect", { x: r.x, y: r.y, width: r.w, height: r.h, class: `sec sec-${r.s.st}`, "vector-effect": "non-scaling-stroke" });
     rect.append(h("svg:title", null, sectorTitle(r.s)));
     svg.append(rect);
-    const fs = Math.min(r.w, r.h) * 0.45;
+    const fs = Math.min(r.w, r.h) * 0.3;
     if (fs > 0) {
       svg.append(
         h("svg:text", { x: r.x + r.w / 2, y: r.y + r.h / 2, "font-size": fs, "text-anchor": "middle", "dominant-baseline": "central", class: "sec-label", "aria-hidden": "true" }, String(Number(r.s.index) + 1)),
@@ -119,10 +191,6 @@ function sectorTitle(s) {
 }
 
 export function render(root, params, app) {
-  return withProjectsApi(root, () => renderFull(root, params, app));
-}
-
-function renderFull(root, params, app) {
   const id = params.id;
   const host = h("div", { class: "stack-lg" });
   const eventsHost = h("div");
@@ -177,7 +245,9 @@ function renderFull(root, params, app) {
     const pairs = [];
     for (const [k, v] of Object.entries(c)) {
       let val;
-      if (v && typeof v === "object" && "x" in v && "z" in v) val = h("span", { class: "num" }, posText(v));
+      if (typeof v === "boolean") val = v ? t("set.yes") : t("set.no");
+      else if (refText(v)) val = refText(v);
+      else if (v && typeof v === "object" && "x" in v && "z" in v) val = h("span", { class: "num" }, posText(v));
       else if (v && typeof v === "object" && v.a && v.b) val = h("span", { class: "num" }, boxText(v));
       else if (k === "dim") val = dimLabel(v);
       else if (Array.isArray(v)) val = v.length ? h("span", { class: "mono" }, v.map((x) => (x && typeof x === "object" ? posText(x) || JSON.stringify(x) : shortId(x))).join(", ")) : h("span", { class: "dim" }, t("ui.none"));
@@ -196,13 +266,86 @@ function renderFull(root, params, app) {
       [t("proj.col.status"), h("span", null, statusEl(pr.status), pr.message ? h("span", { class: "dim" }, ` · ${pr.message}`) : null)],
       [t("proj.col.progress"), g.total !== null ? num(g.done, { max: g.total, unit: g.unit }) : noData()],
       ["%", g.fraction !== null ? num(g.fraction * 100, { unit: "%", digits: 1 }) : noData()],
-      [t("proj.col.rate"), isNum(g.rate) ? num(g.rate, { unit: t("unit.perMin"), digits: 1 }) : noData()],
-      [t("proj.col.eta"), isNum(g.etaSec) ? durationEl(g.etaSec) : noData()],
+      [t("proj.col.rate"), isNum(g.rate) ? num(g.rate, { unit: g.rateUnit, digits: 1 }) : noData()],
     ];
-    if (pr.progress && isNum(pr.progress.unloaded)) pairs.push([t("proj.unloaded"), num(pr.progress.unloaded, { unit: t("unit.blocks") })]);
-    if (pr.progress && isNum(pr.progress.wrong)) pairs.push([t("proj.wrong"), num(pr.progress.wrong, { unit: t("unit.blocks"), warn: pr.progress.wrong > 0 })]);
-    if (isNum(pr.updatedAt)) pairs.push([t("bot.f.updated"), timeEl(pr.updatedAt)]);
-    return h("div", { class: "stack" }, spec(pairs), g.fraction !== null ? h("progress", { max: 1000, value: Math.round(g.fraction * 1000), "aria-label": t("proj.col.progress") }) : null);
+    if (pr.kind === "build") pairs.push([t("proj.col.eta"), isNum(g.etaSec) ? durationEl(g.etaSec) : pr.status === "done" ? num(0, { unit: t("unit.s") }) : noData()]);
+    for (const c of kindCounters(pr)) if (c) pairs.push(c);
+    if (isNum(pr.startedAt)) pairs.push([t("proj.startedAt"), timeEl(pr.startedAt)]);
+    if (isNum(pr.finishedAt)) pairs.push([t("proj.finishedAt"), timeEl(pr.finishedAt)]);
+    return h(
+      "div",
+      { class: "stack" },
+      spec(pairs),
+      g.fraction !== null ? h("progress", { max: 1000, value: Math.round(g.fraction * 1000), "aria-label": t("proj.col.progress") }) : null,
+      gatherItems(pr),
+    );
+  }
+
+  /** gather: one row per quota (delivered of count, stock now, target). */
+  function gatherItems(pr) {
+    const items = pr.kind === "gather" && Array.isArray(pr.progress?.items) ? pr.progress.items : [];
+    if (!items.length) return null;
+    return table(
+      [t("proj.bom.item"), { text: t("proj.g.delivered"), class: "r" }, { text: t("proj.g.stock"), class: "r" }, { text: t("proj.g.target"), class: "r" }],
+      items.map((x) =>
+        h(
+          "tr",
+          null,
+          h("td", { class: "mono" }, shortId(x.item)),
+          h("td", { class: "r" }, num(x.delivered ?? 0, { max: x.count })),
+          h("td", { class: "r" }, n(x.stock)),
+          h("td", { class: "r" }, n(x.target)),
+        ),
+      ),
+    );
+  }
+
+  /** Work the planner could not do (blocked[] {key, reason}) and items only a person can supply (manual[]). */
+  function blockedSection(pr) {
+    const blocked = Array.isArray(pr.blocked) ? pr.blocked : [];
+    const manual = Array.isArray(pr.manual) ? pr.manual.filter((m) => isNum(m.count) && m.count > 0) : [];
+    if (!blocked.length && !manual.length) return h("p", { class: "empty" }, t("proj.noBlocked"));
+    return h(
+      "div",
+      { class: "stack" },
+      manual.length
+        ? h(
+            "div",
+            { class: "error-box", role: "status" },
+            t("proj.manualNote", { n: manual.length, list: manual.map((m) => `${shortId(m.item)} ${m.count}`).join(", ") }),
+          )
+        : null,
+      blocked.length
+        ? table(
+            [t("proj.bl.key"), t("proj.bl.reason")],
+            blocked.map((b) => h("tr", null, h("td", { class: "mono" }, b.key || ""), h("td", { class: "wrap-cell" }, tid("reason", b.reason) || noData()))),
+          )
+        : null,
+    );
+  }
+
+  /** build: the production plan behind the deficits (haul / mine / craft / smelt). */
+  function productionSection(pr) {
+    const list = Array.isArray(pr.production) ? pr.production : Array.isArray(pr.actions) ? pr.actions : [];
+    if (!list.length) return null;
+    return h(
+      "div",
+      { class: "stack-sm" },
+      h("p", { class: "label" }, t("proj.production", { n: list.length })),
+      table(
+        [t("proj.pr.kind"), t("proj.bom.item"), { text: t("proj.pr.count"), class: "r" }, t("proj.pr.ready")],
+        list.map((a) =>
+          h(
+            "tr",
+            null,
+            h("td", null, tid("source", a.kind)),
+            h("td", { class: "mono" }, shortId(a.item)),
+            h("td", { class: "r" }, n(a.count)),
+            h("td", null, a.ready ? h("span", { class: "st-ok" }, t("set.yes")) : h("span", { class: "dim" }, t("proj.pr.waits"))),
+          ),
+        ),
+      ),
+    );
   }
 
   function bomSection(pr) {
@@ -210,7 +353,6 @@ function renderFull(root, params, app) {
     if (!rows.length) {
       return h("p", { class: "empty" }, pr.kind === "build" ? t("proj.bomNone") : t("proj.bomNotUsed"));
     }
-    const manual = rows.filter((r) => r.source === "manual" && r.deficit > 0);
     const cell = (v, opts) => h("td", { class: "r" }, isNum(v) ? num(v, opts) : noData());
     const trs = rows.map((r) =>
       h(
@@ -228,13 +370,6 @@ function renderFull(root, params, app) {
     return h(
       "div",
       { class: "stack" },
-      manual.length
-        ? h(
-            "div",
-            { class: "error-box", role: "status" },
-            t("proj.manualNote", { n: manual.length, list: manual.map((r) => `${shortId(r.item)} ${r.deficit}`).join(", ") }),
-          )
-        : null,
       table(
         [
           t("proj.bom.item"),
@@ -252,7 +387,7 @@ function renderFull(root, params, app) {
 
   function sectorsSection(pr) {
     const sectors = sectorsOf(pr);
-    if (!sectors.length) return h("p", { class: "empty" }, pr.kind === "build" ? t("proj.sectorsNone") : t("proj.sectorsNotUsed"));
+    if (!sectors.length) return h("p", { class: "empty" }, t("proj.sectorsNone"));
     const legend = h(
       "p",
       { class: "small row" },
@@ -352,12 +487,15 @@ function renderFull(root, params, app) {
         h("div", { class: "row" }, controls(pr)),
       );
     }
+    const usesBom = pr.kind === "build" || pr.kind === "gather";
+    const usesMap = pr.kind === "build" || pr.kind === "clear";
     mount(
       dataHost,
       h("div", { class: "cols" }, sec("proj.progress", progressSpec(pr)), sec("proj.config", configSpec(pr))),
-      sec("proj.bom", bomSection(pr)),
-      sec("proj.sectors", sectorsSection(pr)),
       sec("proj.assignments", assignmentsSection(pr)),
+      sec("proj.blocked", blockedSection(pr)),
+      usesMap ? sec(pr.kind === "clear" ? "proj.slabs" : "proj.sectors", sectorsSection(pr)) : null,
+      usesBom ? sec("proj.bom", pr.kind === "build" ? bomSection(pr) : null, productionSection(pr) || (pr.kind === "gather" ? h("p", { class: "empty" }, t("proj.noProduction")) : null)) : null,
       sec("proj.events", eventsHost),
     );
   }

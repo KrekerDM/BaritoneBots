@@ -129,6 +129,22 @@ export function botStateEl(state) {
   return h("span", { class: cls }, tid("state", state));
 }
 
+/** "Waypoint mine", "Where I stand": a position reference (SPEC §5.7e) in words. */
+export function refText(v) {
+  if (!v || typeof v !== "object" || typeof v.ref !== "string") return null;
+  const label = t(`ref.${v.ref}`, null, v.ref).replace(/…$/, "");
+  const extra = v.name || v.id;
+  return extra ? `${label} ${extra}` : label;
+}
+
+function placeText(v) {
+  if (!v || typeof v !== "object") return null;
+  if (typeof v.ref === "string") return refText(v);
+  if ("x" in v && "z" in v) return posText(v);
+  if (v.a && v.b) return `${placeText(v.a)} .. ${placeText(v.b)}`;
+  return null;
+}
+
 /** Short one-line summary of task arguments for queue lists. */
 export function argsSummary(args) {
   if (!args || typeof args !== "object") return "";
@@ -136,9 +152,8 @@ export function argsSummary(args) {
   for (const [k, v] of Object.entries(args)) {
     if (v === undefined || v === null || v === "") continue;
     let s;
-    if (v && typeof v === "object" && "x" in v && "z" in v) s = posText(v);
-    else if (v && typeof v === "object" && v.a && v.b) s = boxText(v);
-    else if (Array.isArray(v)) s = v.map((x) => (x && typeof x === "object" ? (x.item ? `${shortId(x.item)}×${x.count}` : posText(x) || JSON.stringify(x)) : shortId(x))).join(", ");
+    if (placeText(v) !== null) s = placeText(v);
+    else if (Array.isArray(v)) s = v.map((x) => (x && typeof x === "object" ? (x.item ? `${shortId(x.item)}×${x.count}` : placeText(x) || JSON.stringify(x)) : shortId(x))).join(", ");
     else if (typeof v === "object") s = JSON.stringify(v);
     else s = shortId(String(v));
     parts.push(`${k}=${s}`);

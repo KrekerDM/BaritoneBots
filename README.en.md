@@ -155,8 +155,7 @@ decisions taken during development: [docs/dev/DECISIONS.md](docs/dev/DECISIONS.m
 - Honest resources only: whatever a bot cannot mine, craft or smelt ends up on a
   "please supply" list.
 - Mining under anti-xray is slower: the bot branch-mines instead of heading to the ore.
-- The AI dispatcher through a local Ollama and the project screens in the panel
-  are still in progress.
+- The AI dispatcher through a local Ollama is still in progress.
 
 ## Licence
 
