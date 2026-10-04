@@ -48,7 +48,10 @@ class CatalogI18nTest {
             assertTrue(catalog.isSupported(supported), supported + " should be supported");
         }
         assertTrue(catalog.isStep("kit") && catalog.isSupported("kit"));
-        assertFalse(catalog.isSupported("sort_storage"));
+        assertFalse(catalog.isSupported("smelt_all"));
+        for (String step : List.of("sort_storage", "obtain", "progress", "supply")) {
+            assertTrue(catalog.isStep(step) && catalog.isSupported(step), step + " should be a supported manager step");
+        }
         assertTrue(catalog.isHeavy("mine"));
         assertTrue(catalog.isContinuous("follow"));
     }

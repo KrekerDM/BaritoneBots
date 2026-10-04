@@ -49,12 +49,24 @@ public final class Dispatcher {
     public static final String STEP_HOME = "home";
     public static final String STEP_WAIT = "wait";
     public static final String STEP_GOTO_WAYPOINT = "goto_waypoint";
+    /** Auto-supply in front of a task (inserted by the dispatcher, SPEC §5.7a). */
+    public static final String STEP_SUPPLY = "supply";
+    public static final String STEP_OBTAIN = "obtain";
+    public static final String STEP_PROGRESS = "progress";
+    public static final String STEP_SORT_STORAGE = "sort_storage";
+    /** Origin of the {@code take}s auto-supply inserts: their failures never stop a scenario or a planner batch. */
+    public static final String ORIGIN_SUPPLY = "supply";
+    /** A stuck task is retried once after stepping back this far. */
+    static final int STUCK_STEP_BACK = 3;
 
     private final Manager m;
     private final Path queuesFile;
     private final Map<String, Run> runs = new LinkedHashMap<>();
     private boolean saveScheduled;
     private Hooks hooks;
+    /** Entries cancelled by stuck recovery: first time → step back + retry, retried entry → fail {@code stuck}. */
+    private final java.util.Set<String> stuckCancels = new java.util.HashSet<>();
+    private final java.util.Set<String> stuckRetries = new java.util.HashSet<>();
 
     /**
      * Observer for the planner (called on the loop, never re-entrantly dispatching: implementations post work).
@@ -186,6 +198,7 @@ public final class Dispatcher {
     public void clear(BotState b) {
         dropRuns(b, Reasons.CANCELLED);
         b.queue.clearQueued();
+        m.goals.forgetBot(b.id);
         changed(b);
         cancelCurrent(b);
     }
@@ -196,6 +209,8 @@ public final class Dispatcher {
         b.queue.clearQueued();
         b.queue.abortCurrent();
         cancelWaitTimer(b);
+        m.goals.forgetBot(b.id);
+        m.autopilot.forgetBot(b.id);
         saveSoon();
     }
 
@@ -310,6 +325,13 @@ public final class Dispatcher {
                 runStep(b, next);
                 continue;
             }
+            if (m.autopilot.supply().wants(b, next)) {
+                // auto-supply: a manager step in front fetches tools / food / blocks / materials first
+                b.queue.pushFront(List.of(QueueEntry.of(STEP_SUPPLY, Json.obj("taskId", next.id(), "type", next.type(),
+                        "args", next.args().deepCopy()), 0, next.label(), next.origin())));
+                changed(b);
+                continue;
+            }
             if (m.catalog.isHeavy(next.type()) && heavyLimitReached(b)) {
                 setWaiting(b, WAIT_HEAVY);
                 return;
@@ -383,7 +405,68 @@ public final class Dispatcher {
             case STEP_GOTO_WAYPOINT -> gotoWaypoint(b, e, Json.getString(e.args(), "name", ""));
             case STEP_DEPOSIT_STORAGE -> depositStorage(b, e);
             case STEP_KIT -> kit(b, e);
+            case STEP_SUPPLY -> m.autopilot.supply().run(b, e);
+            case STEP_OBTAIN -> m.goals.obtain(b, e);
+            case STEP_PROGRESS -> m.goals.progress(b, e);
+            case STEP_SORT_STORAGE -> m.autopilot.sortNow(b, e);
             default -> stepFailed(b, e, Reasons.UNSUPPORTED, "manager step '" + e.type() + "' is not implemented yet");
+        }
+    }
+
+    // ------------------------------------------------------------------ API for manager steps that run on the manager
+
+    /** Marks a manager step as running (it finishes later through {@link #finishStep}). */
+    public void startStep(BotState b, QueueEntry e) {
+        b.queue.start(e, System.currentTimeMillis());
+        b.waiting = null;
+        changed(b);
+    }
+
+    /** True while {@code e} is the bot's running entry (async step callbacks check this first). */
+    public boolean isRunning(BotState b, QueueEntry e) {
+        QueueEntry cur = b.queue.current();
+        return cur != null && cur.id().equals(e.id());
+    }
+
+    /**
+     * Ends a running manager step: {@code children} go to the queue front, then the outcome is recorded (unless
+     * {@code quiet}: an intermediate planning step that reports nothing) and the queue moves on. Ignored when the
+     * step is no longer running (cancelled meanwhile).
+     */
+    public void finishStep(BotState b, QueueEntry e, boolean ok, String reason, String message, JsonObject data,
+                           List<QueueEntry> children, boolean quiet) {
+        if (!isRunning(b, e)) {
+            return;
+        }
+        b.queue.finish(e.id());
+        if (children != null && !children.isEmpty()) {
+            b.queue.pushFront(children);
+        }
+        if (!quiet) {
+            outcome(b, e, ok, reason, message, data);
+        } else {
+            changed(b);
+        }
+        dispatch(b);
+    }
+
+    /** Expands a manager step synchronously (from {@code runStep}): children first, then the queue moves on. */
+    public void expandStep(BotState b, List<QueueEntry> children) {
+        expand(b, children);
+    }
+
+    /** A queue entry created by a manager step: same label/origin as the step, given timeout. */
+    public QueueEntry childEntry(QueueEntry step, String type, JsonObject args, int timeoutSec) {
+        return new QueueEntry(Tokens.id("t"), type, args, timeoutSec, step.label(), step.origin(),
+                System.currentTimeMillis(), 0, step.fullRetries());
+    }
+
+    /** Reports a step failure from outside (async steps that were never started). */
+    public void failStep(BotState b, QueueEntry e, String reason, String message) {
+        if (isRunning(b, e)) {
+            finishStep(b, e, false, reason, message, null, null, false);
+        } else {
+            stepFailed(b, e, reason, message);
         }
     }
 
@@ -439,15 +522,28 @@ public final class Dispatcher {
 
     /** Storage containers in the bot's dimension, nearest-neighbour order from the bot. */
     private List<Pos> storageFor(BotState b) {
+        return storageTargets(b);
+    }
+
+    /**
+     * Where unloaded items go: containers with role {@code inbox} first (the autopilot sorts them), then
+     * {@code storage}; each group in nearest-neighbour order from the bot, in the bot's dimension.
+     */
+    public List<Pos> storageTargets(BotState b) {
         WorldDoc doc = world(b);
         if (doc == null) {
             return List.of();
         }
         String dim = botDim(b);
-        List<Pos> list = doc.containers.stream()
-                .filter(c -> c.hasRole("storage") && Dims.normalize(c.dim()).equals(dim))
+        List<Pos> inbox = doc.containers.stream()
+                .filter(c -> c.hasRole("inbox") && Dims.normalize(c.dim()).equals(dim))
                 .map(WorldDoc.Container::pos).toList();
-        return KitPlanner.nearestNeighbour(list, botPos(b), p -> p);
+        List<Pos> storage = doc.containers.stream()
+                .filter(c -> c.hasRole("storage") && !c.hasRole("inbox") && Dims.normalize(c.dim()).equals(dim))
+                .map(WorldDoc.Container::pos).toList();
+        List<Pos> out = new ArrayList<>(KitPlanner.nearestNeighbour(inbox, botPos(b), p -> p));
+        out.addAll(KitPlanner.nearestNeighbour(storage, botPos(b), p -> p));
+        return out;
     }
 
     private void depositStorage(BotState b, QueueEntry e) {
@@ -456,11 +552,16 @@ public final class Dispatcher {
             stepFailed(b, e, Reasons.NOT_FOUND, "no containers with role 'storage' in this dimension");
             return;
         }
-        JsonArray keep = new JsonArray();
-        m.config.get().planner().depositKeep().forEach(keep::add);
-        Json.getStringList(e.args(), "keep").forEach(keep::add);
-        JsonObject args = Json.obj("containers", Json.arrOf(storage), "keep", keep);
-        expand(b, List.of(child(e, TaskTypes.DEPOSIT, args)));
+        List<String> keepList = new ArrayList<>(m.config.get().planner().depositKeep());
+        keepList.addAll(Json.getStringList(e.args(), "keep"));
+        JsonArray keep = Json.arrOf(keepList);
+        List<QueueEntry> children = new ArrayList<>();
+        // without inboxes, items go straight into their category chests when the autopilot sorts
+        for (JsonObject sorted : m.autopilot.categoryDeposits(b, keepList)) {
+            children.add(child(e, TaskTypes.DEPOSIT, sorted));
+        }
+        children.add(child(e, TaskTypes.DEPOSIT, Json.obj("containers", Json.arrOf(storage), "keep", keep)));
+        expand(b, children);
     }
 
     private void kit(BotState b, QueueEntry e) {
@@ -525,8 +626,75 @@ public final class Dispatcher {
         if (e == null) {
             return;
         }
-        outcome(b, e, r.ok(), r.reason(), r.message(), r.data());
+        boolean stuckCancel = stuckCancels.remove(e.id());
+        boolean retried = stuckRetries.remove(e.id());
+        if (stuckCancel && !r.ok()) {
+            stuckOutcome(b, e, retried);
+        } else {
+            outcome(b, e, r.ok(), r.reason(), r.message(), r.data());
+        }
         afterFinish(b, e);
+    }
+
+    // ------------------------------------------------------------------ stuck recovery (SPEC §5.7b)
+
+    /**
+     * The autopilot saw no progress for {@code stuckSec}: cancel the running task; when the cancel comes back the
+     * task is retried once after a short step back, a second time it fails with {@code stuck}.
+     */
+    public void onStuck(BotState b, long stillMs) {
+        QueueEntry cur = b.queue.current();
+        if (cur == null || m.catalog.isStep(cur.type()) || !b.linked() || stuckCancels.contains(cur.id())) {
+            return;
+        }
+        stuckCancels.add(cur.id());
+        Log.info("%s: %s %s made no progress for %d s; cancelling", b.id, cur.type(), cur.id(), stillMs / 1000);
+        b.session.send(MessageTypes.CANCEL, Json.obj("taskId", cur.id()));
+        String id = cur.id();
+        m.loop.schedule(() -> {
+            QueueEntry still = b.queue.current();
+            if (still != null && still.id().equals(id) && stuckCancels.remove(id)) {
+                b.queue.abortCurrent(); // the bot never answered the cancel
+                stuckOutcome(b, still, stuckRetries.remove(id));
+                afterFinish(b, still);
+            }
+        }, CANCEL_GRACE_MS, TimeUnit.MILLISECONDS);
+    }
+
+    private void stuckOutcome(BotState b, QueueEntry e, boolean alreadyRetried) {
+        int sec = m.config.get().autopilot().forBot(b.def).stuckSec();
+        if (alreadyRetried) {
+            m.event("stuck", Levels.WARN, b.id, "event.stuck.failed", Map.of("bot", b.id, "task", e.type(), "sec", sec));
+            outcome(b, e, false, Reasons.STUCK, "no progress for " + sec + " s (retried once)", null);
+            return;
+        }
+        QueueEntry again = e.retry();
+        stuckRetries.add(again.id());
+        List<QueueEntry> front = new ArrayList<>();
+        JsonObject back = stepBack(b);
+        if (back != null) {
+            front.add(QueueEntry.of(TaskTypes.GOTO, back, 30, null, QueueEntry.ORIGIN_RECOVERY));
+        }
+        front.add(again);
+        b.queue.pushFront(front);
+        m.event("stuck_retry", Levels.WARN, b.id, "event.stuck.retry", Map.of("bot", b.id, "task", e.type(), "sec", sec));
+        if (hooks != null) {
+            hooks.onFinished(b, e, false, Reasons.STUCK, "stuck, retrying", null, true);
+        }
+        m.goals.remap(e.id(), again.id());
+        changed(b);
+    }
+
+    /** {@code goto} args 3 blocks behind the bot (opposite to where it faces), or null without a position. */
+    private static JsonObject stepBack(BotState b) {
+        if (b.status == null || b.status.pos() == null) {
+            return null;
+        }
+        double yaw = Math.toRadians(b.status.yaw());
+        // Minecraft: yaw 0 faces +Z (south); facing = (-sin, cos), so behind = (sin, -cos)
+        int x = (int) Math.floor(b.status.pos().x() + Math.sin(yaw) * STUCK_STEP_BACK);
+        int z = (int) Math.floor(b.status.pos().z() - Math.cos(yaw) * STUCK_STEP_BACK);
+        return Json.obj("x", x, "z", z, "range", 1);
     }
 
     private void afterFinish(BotState b, QueueEntry e) {
@@ -543,6 +711,7 @@ public final class Dispatcher {
         if (hooks != null) {
             hooks.onFinished(b, e, ok, reason, message, data, requeued);
         }
+        m.goals.onOutcome(b, e, requeued, ok, reason);
     }
 
     /** Returns true when the entry was queued again (retry). */
@@ -756,7 +925,7 @@ public final class Dispatcher {
                         QueueEntry q = Json.fromJson(el, QueueEntry.class);
                         if (q != null && q.type() != null && m.catalog.isKnown(q.type()) && (q.origin() == null
                                 || !q.origin().startsWith(TaskSpec.ORIGIN_SCENARIO_PREFIX)
-                                && !q.origin().startsWith(TaskSpec.ORIGIN_PROJECT_PREFIX))) {
+                                && !io.github.krekerdm.baritonebots.manager.planner.Planner.isPlannerOrigin(q.origin()))) {
                             entries.add(q);
                         }
                     } catch (RuntimeException ignored) {

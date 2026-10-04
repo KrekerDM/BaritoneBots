@@ -13,11 +13,13 @@ import java.util.Optional;
  */
 public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProfile> servers, List<BotDef> bots,
                             JsonObject behaviour, JsonObject baritone, JsonObject client, JsonObject status,
-                            PlannerCfg planner) {
+                            PlannerCfg planner, AutopilotCfg autopilot, List<OrderDef> orders) {
 
     public ManagerConfig {
         servers = servers == null ? List.of() : List.copyOf(servers);
         bots = bots == null ? List.of() : List.copyOf(bots);
+        autopilot = autopilot == null ? AutopilotCfg.defaults() : autopilot;
+        orders = orders == null ? List.of() : List.copyOf(orders);
         behaviour = orEmpty(behaviour);
         baritone = orEmpty(baritone);
         client = orEmpty(client);
@@ -119,12 +121,13 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
 
     public record BotDef(String id, String username, Account account, String serverId, boolean enabled,
                          boolean autoStart, Integer memoryMb, String jvmArgs, String homeWaypoint, List<String> roles,
-                         JsonObject behaviour, JsonObject baritone) {
+                         JsonObject behaviour, JsonObject baritone, JsonObject autopilot) {
         public BotDef {
             account = account == null ? new Account(Account.OFFLINE) : account;
             roles = roles == null ? List.of() : List.copyOf(roles);
             behaviour = orEmpty(behaviour);
             baritone = orEmpty(baritone);
+            autopilot = orEmpty(autopilot);
         }
 
         public boolean microsoft() {
@@ -146,6 +149,67 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
                              int restockFreeSlotsTarget, boolean autoDepositWhenFull, List<String> depositKeep) {
         public PlannerCfg {
             depositKeep = depositKeep == null ? List.of() : List.copyOf(depositKeep);
+        }
+    }
+
+    /**
+     * Autopilot settings (SPEC §5.7a): auto-supply, auto-sort, idle work, container discovery, stuck recovery.
+     * {@link #forBot} applies a bot's {@code bots[].autopilot} override.
+     */
+    public record AutopilotCfg(boolean supply, boolean sort, boolean idleWork, boolean discovery, int discoveryRadius,
+                               int discoveryIntervalSec, int inspectMaxAgeMin, int maxInspectPerTick, int homeRadius,
+                               boolean useFound, int foodMin, int blocksMin, double toolMinDurability, int stuckSec,
+                               int idleHomeSec, List<String> throwaway, List<String> smeltInputs,
+                               List<Category> categories) {
+        /** Keys a bot may override in {@code bots[].autopilot}. */
+        public static final List<String> BOT_KEYS = List.of("supply", "sort", "idleWork", "discovery", "foodMin",
+                "blocksMin", "toolMinDurability", "stuckSec");
+        private static AutopilotCfg defaults;
+
+        public AutopilotCfg {
+            throwaway = throwaway == null ? List.of() : List.copyOf(throwaway);
+            smeltInputs = smeltInputs == null ? List.of() : List.copyOf(smeltInputs);
+            categories = categories == null ? List.of() : List.copyOf(categories);
+        }
+
+        /** The schema defaults. */
+        public static synchronized AutopilotCfg defaults() {
+            if (defaults == null) {
+                defaults = Json.fromJson(Json.getObj(SettingsSchema.defaults(), "autopilot"), AutopilotCfg.class);
+            }
+            return defaults;
+        }
+
+        /** This config with the bot's override applied (unknown keys and wrong types are ignored). */
+        public AutopilotCfg forBot(BotDef bot) {
+            JsonObject o = bot == null ? null : bot.autopilot();
+            if (o == null || o.isEmpty()) {
+                return this;
+            }
+            return new AutopilotCfg(Json.getBool(o, "supply", supply), Json.getBool(o, "sort", sort),
+                    Json.getBool(o, "idleWork", idleWork), Json.getBool(o, "discovery", discovery), discoveryRadius,
+                    discoveryIntervalSec, inspectMaxAgeMin, maxInspectPerTick, homeRadius, useFound,
+                    Math.max(0, Json.getInt(o, "foodMin", foodMin)), Math.max(0, Json.getInt(o, "blocksMin", blocksMin)),
+                    Math.max(0, Math.min(1, Json.getDouble(o, "toolMinDurability", toolMinDurability))),
+                    Math.max(0, Json.getInt(o, "stuckSec", stuckSec)), idleHomeSec, throwaway, smeltInputs, categories);
+        }
+    }
+
+    /** A sorting category: item globs and {@code #tag} entries (item tags from game data). */
+    public record Category(String name, List<String> globs) {
+        public Category {
+            globs = globs == null ? List.of() : List.copyOf(globs);
+        }
+    }
+
+    /**
+     * A standing order (SPEC §5.7b): keep {@code item} between {@code min} and {@code max} in the {@code into}
+     * containers (a container role such as {@code storage}, {@code supply}, {@code sorted:food}, or a container id).
+     */
+    public record OrderDef(String id, boolean enabled, String serverId, String item, int min, Integer max, String into) {
+        /** Stock the order fills up to once it dropped below {@code min}. */
+        public int target() {
+            return max != null && max > min ? max : min;
         }
     }
 

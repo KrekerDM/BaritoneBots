@@ -26,13 +26,13 @@ public final class RoleTracker {
     /** Would taking {@code role} be a role change (no role yet = no change)? */
     public boolean isChange(String botId, String role) {
         String cur = role(botId);
-        return cur != null && !cur.equals(role);
+        return role != null && cur != null && !cur.equals(role);
     }
 
-    /** May the bot switch to {@code role} now? */
+    /** May the bot switch to {@code role} now? A {@code null} role (role-neutral work) is always allowed. */
     public boolean allows(String botId, String role, long now, long cooldownMs) {
         Entry e = roles.get(botId);
-        return e == null || e.role().equals(role) || now - e.since() >= cooldownMs;
+        return role == null || e == null || e.role().equals(role) || now - e.since() >= cooldownMs;
     }
 
     /** Records the role of a new assignment; the timer only restarts when the role actually changes. */

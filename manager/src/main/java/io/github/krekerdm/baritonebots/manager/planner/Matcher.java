@@ -30,8 +30,9 @@ public final class Matcher {
             roles = roles == null ? List.of() : List.copyOf(roles);
         }
 
+        /** A {@code null} role is role-neutral work any bot may do (the source's {@code eligible} decides). */
         public boolean allows(String role) {
-            return roles.isEmpty() || roles.contains(role);
+            return role == null || roles.isEmpty() || roles.contains(role);
         }
     }
 

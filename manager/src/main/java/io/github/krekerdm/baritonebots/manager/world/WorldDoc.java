@@ -23,8 +23,9 @@ import java.util.Set;
  * the manager loop.
  */
 public final class WorldDoc {
+    /** {@code found}: discovered away from home by the autopilot; a source only with {@code autopilot.useFound}. */
     public static final Set<String> CONTAINER_ROLES = Set.of("kit", "storage", "supply", "fuel", "inbox", "furnace",
-            "crafting");
+            "crafting", "found");
     public static final String SORTED_PREFIX = "sorted:";
     public static final int MAX_DEATHS = 200;
 
@@ -60,6 +61,20 @@ public final class WorldDoc {
 
         public Container withSnapshot(String newBlock, Snapshot s, long seen) {
             return new Container(id, dim, pos, newBlock == null ? block : newBlock, roles, label, s, seen);
+        }
+
+        public Container withRoles(List<String> newRoles) {
+            return new Container(id, dim, pos, block, newRoles, label, snapshot, lastSeen);
+        }
+
+        /** The {@code sorted:<category>} role's category, or null. */
+        public String sortedCategory() {
+            for (String r : roles) {
+                if (r.startsWith(SORTED_PREFIX)) {
+                    return r.substring(SORTED_PREFIX.length());
+                }
+            }
+            return null;
         }
     }
 

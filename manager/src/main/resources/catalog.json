@@ -141,8 +141,14 @@
     {"step": "goto_waypoint", "continuous": false, "heavy": false, "supported": true, "args": [
       {"name": "name", "type": "string", "required": true}
     ]},
-    {"step": "sort_storage", "continuous": false, "heavy": false, "supported": false, "args": []},
-    {"step": "smelt_all", "continuous": false, "heavy": false, "supported": false, "args": []}
+    {"step": "sort_storage", "continuous": false, "heavy": false, "supported": true, "args": []},
+    {"step": "smelt_all", "continuous": false, "heavy": false, "supported": false, "args": []},
+    {"step": "obtain", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "item", "type": "item", "required": true},
+      {"name": "count", "type": "int", "required": false, "default": 1, "min": 1, "max": 2304, "unit": "items"}]},
+    {"step": "progress", "continuous": false, "heavy": false, "supported": true, "args": [
+      {"name": "tier", "type": "enum", "enum": ["wood", "stone", "iron", "diamond"], "required": true, "default": "iron"}]},
+    {"step": "supply", "continuous": false, "heavy": false, "supported": true, "internal": true, "args": []}
   ],
   "roles": ["builder", "miner", "lumberjack", "farmer", "smelter", "crafter", "sorter", "rancher", "hauler", "guard"],
   "projectKinds": [

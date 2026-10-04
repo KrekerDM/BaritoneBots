@@ -487,7 +487,7 @@ final class ApiRoutes {
             JsonArray found = Json.getArr(Json.getObj(res, "data"), "containers");
             JsonArray list = found == null ? new JsonArray() : found;
             return loop(() -> {
-                int added = m.worlds.mergeDiscovered(sid, list);
+                int added = m.worlds.mergeDiscovered(sid, list, m.autopilot.roleChooser(sid));
                 m.broadcastWorld(sid);
                 return Json.obj("found", list.size(), "added", added, "total", m.worlds.get(sid).containers.size(),
                         "world", m.worlds.get(sid).toJson());
@@ -523,6 +523,32 @@ final class ApiRoutes {
             return null;
         }));
         r.post("/api/projects/{id}/{action}", q -> loop(() -> m.projects.action(q.param("id"), q.param("action"))));
+
+        // autopilot and standing orders (orders live in config.json → orders[]; these routes edit that list)
+        r.get("/api/autopilot", q -> loop(m.autopilot::view));
+        r.get("/api/orders", q -> loop(m.autopilot::ordersView));
+        r.post("/api/orders", q -> {
+            JsonObject body = q.json();
+            return loop(() -> {
+                if (Json.getString(body, "serverId", "").isBlank() && m.config.get().servers().size() == 1) {
+                    body.addProperty("serverId", m.config.get().servers().getFirst().id());
+                }
+                if (Json.getString(body, "id", "").isBlank()) {
+                    String item = Json.getString(body, "item", "order");
+                    body.addProperty("id", uniqueId(slug(item.contains(":") ? item.substring(item.indexOf(':') + 1) : item),
+                            "orders"));
+                }
+                return new HttpApi.Status(201, m.config.addItem("orders", body));
+            });
+        });
+        r.put("/api/orders/{id}", q -> {
+            JsonObject body = q.json();
+            return loop(() -> m.config.updateItem("orders", q.param("id"), body));
+        });
+        r.delete("/api/orders/{id}", q -> loop(() -> {
+            m.config.removeItem("orders", q.param("id"));
+            return null;
+        }));
 
         // extras (not in SPEC §6): planner overview and game data lookups
         r.get("/api/planner", q -> loop(m.planner::view));

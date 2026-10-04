@@ -31,7 +31,8 @@ export function catalogEntries(catalog) {
     supported: x.supported !== false,
     args: Array.isArray(x.args) ? x.args : [],
   }));
-  const steps = (catalog?.managerSteps || []).map((s) => {
+  // "internal" steps (auto-supply) are inserted by the manager, never picked by hand
+  const steps = (catalog?.managerSteps || []).filter((s) => !(typeof s === "object" && s.internal)).map((s) => {
     const name = typeof s === "string" ? s : s.name || s.type || s.step;
     const args = typeof s === "object" && Array.isArray(s.args) ? s.args : STEP_ARGS[name] || [];
     const supported = !(typeof s === "object" && s.supported === false);

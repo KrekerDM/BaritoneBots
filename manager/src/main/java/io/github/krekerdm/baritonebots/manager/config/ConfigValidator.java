@@ -239,6 +239,63 @@ public final class ConfigValidator {
         }
         JsonObject defense = Json.getObj(Json.getObj(root, "behaviour"), "defense");
         regexes(Json.getStringList(defense, "avoidNamePatterns"), "behaviour.defense.avoidNamePatterns", errors);
+
+        JsonArray categories = Json.getArr(Json.getObj(root, "autopilot"), "categories");
+        Set<String> catNames = new HashSet<>();
+        for (int i = 0; categories != null && i < categories.size(); i++) {
+            if (categories.get(i).isJsonObject()) {
+                String name = Json.getString(categories.get(i).getAsJsonObject(), "name", "");
+                if (!CATEGORY.matcher(name).matches()) {
+                    errors.putIfAbsent("autopilot.categories[" + i + "].name", "pattern");
+                } else if (!catNames.add(name)) {
+                    errors.putIfAbsent("autopilot.categories[" + i + "].name", "duplicate");
+                }
+            }
+        }
+        Set<String> orderIds = new HashSet<>();
+        JsonArray orders = Json.getArr(root, "orders");
+        for (int i = 0; orders != null && i < orders.size(); i++) {
+            if (!orders.get(i).isJsonObject()) {
+                continue;
+            }
+            JsonObject o = orders.get(i).getAsJsonObject();
+            String p = "orders[" + i + "]";
+            uniqueId(Json.getString(o, "id", ""), p + ".id", orderIds, errors);
+            if (!serverIds.contains(Json.getString(o, "serverId", "").toLowerCase(Locale.ROOT))) {
+                errors.putIfAbsent(p + ".serverId", "unknown_server");
+            }
+            if (!ITEM.matcher(Json.getString(o, "item", "")).matches()) {
+                errors.putIfAbsent(p + ".item", "pattern");
+            }
+            JsonElement max = o.get("max");
+            if (max != null && max.isJsonPrimitive() && max.getAsJsonPrimitive().isNumber()
+                    && max.getAsInt() < Json.getInt(o, "min", 0)) {
+                errors.putIfAbsent(p + ".max", "range");
+            }
+            String into = Json.getString(o, "into", "");
+            if (!validInto(into)) {
+                errors.putIfAbsent(p + ".into", "pattern");
+            }
+        }
+    }
+
+    /** Category names: lowercase ids usable in {@code sorted:<name>}. */
+    public static final Pattern CATEGORY = Pattern.compile("[a-z0-9_]{1,32}");
+    /** An item id, with or without namespace. */
+    public static final Pattern ITEM = Pattern.compile("([a-z0-9_.-]+:)?[a-z0-9_./-]+");
+
+    /** {@code into} of a standing order: a container role, {@code sorted:<category>} or a container id. */
+    public static boolean validInto(String into) {
+        if (into == null || into.isBlank()) {
+            return false;
+        }
+        if (SettingsSchema.ORDER_ROLES.contains(into)) {
+            return true;
+        }
+        if (into.startsWith("sorted:")) {
+            return CATEGORY.matcher(into.substring("sorted:".length())).matches();
+        }
+        return ID.matcher(into).matches();
     }
 
     private static void uniqueId(String id, String path, Set<String> seen, Map<String, String> errors) {

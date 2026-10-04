@@ -9,7 +9,7 @@ import { num, noData, isNum, posText, boxText, dimLabel, shortId, timeEl } from 
 import { argField, collect, refBotSelect } from "../forms.js";
 
 const ROLE_RE = /^(kit|storage|supply|fuel|inbox|furnace|crafting|sorted:[a-z0-9_]+)$/;
-export const CONTAINER_ROLES = ["kit", "storage", "supply", "fuel", "inbox", "furnace", "crafting", "sorted:<category>"];
+export const CONTAINER_ROLES = ["kit", "storage", "supply", "fuel", "inbox", "furnace", "crafting", "found", "sorted:<category>"];
 
 export function render(root, params, app) {
   const servers = store.servers;

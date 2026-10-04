@@ -230,7 +230,7 @@ public final class ProductionWork {
     }
 
     /** 0 wood/gold, 1 stone, 2 iron, 3 diamond, 4 netherite; -1 not a tool of that kind. */
-    static int toolTier(String itemId, String kind) {
+    public static int toolTier(String itemId, String kind) {
         String path = Ids.path(itemId);
         if (!path.endsWith("_" + kind)) {
             return -1;
@@ -246,9 +246,21 @@ public final class ProductionWork {
         return -1;
     }
 
-    static int tierRank(String tier) {
+    public static int tierRank(String tier) {
         int i = GameData.TOOL_TIERS.indexOf(tier == null ? "wood" : tier);
         return Math.max(0, i);
+    }
+
+    /** The plain tool item of a tier: {@code (pickaxe, stone)} → {@code minecraft:stone_pickaxe}. */
+    public static String toolItem(String kind, String tier) {
+        String prefix = switch (tier == null ? "wood" : tier) {
+            case "stone" -> "stone_";
+            case "iron" -> "iron_";
+            case "diamond" -> "diamond_";
+            case "netherite" -> "netherite_";
+            default -> "wooden_";
+        };
+        return "minecraft:" + prefix + kind;
     }
 
     public static boolean hasTool(Map<String, Integer> items, String kind, String minTier) {
@@ -435,24 +447,32 @@ public final class ProductionWork {
         mineRun(a, b, host);
     }
 
+    /**
+     * {@code mine} task arguments; ores on an anti-xray server (SPEC §5.7b3) switch to legit mining, with fake-ore
+     * detection on {@code fake} servers.
+     */
+    public static JsonObject mineArgs(JsonArray blocks, int amount, String antiXray) {
+        JsonArray b = blocks == null ? new JsonArray() : blocks.deepCopy();
+        JsonObject args = Json.obj("blocks", b, "amount", Math.max(1, amount));
+        boolean ores = false;
+        for (JsonElement e : b) {
+            String id = e.getAsString();
+            ores |= id.endsWith("_ore") || id.endsWith("ancient_debris");
+        }
+        if (ores && antiXray != null && !ManagerConfig.ServerProfile.ANTI_XRAY_NONE.equals(antiXray)) {
+            args.addProperty("strategy", "legit");
+            if (ManagerConfig.ServerProfile.ANTI_XRAY_FAKE.equals(antiXray)) {
+                args.addProperty("fakeOres", true);
+            }
+        }
+        return args;
+    }
+
     private void mineRun(Assignment a, BotState b, Host host) {
         JsonObject d = a.item.data();
         String item = Json.getString(d, "item", "");
         int amount = Math.min(Json.getInt(d, "count", 1), slotBudget(b) * ItemStacks.maxStack(item));
-        JsonArray blocks = Json.getArr(d, "blocks");
-        JsonObject args = Json.obj("blocks", blocks == null ? new JsonArray() : blocks.deepCopy(), "amount", Math.max(1, amount));
-        String ax = host.antiXray();
-        boolean ores = false;
-        for (JsonElement e : blocks == null ? new JsonArray() : blocks) {
-            String id = e.getAsString();
-            ores |= id.endsWith("_ore") || id.endsWith("ancient_debris");
-        }
-        if (ores && !ManagerConfig.ServerProfile.ANTI_XRAY_NONE.equals(ax)) {
-            args.addProperty("strategy", "legit");
-            if (ManagerConfig.ServerProfile.ANTI_XRAY_FAKE.equals(ax)) {
-                args.addProperty("fakeOres", true);
-            }
-        }
+        JsonObject args = mineArgs(Json.getArr(d, "blocks"), amount, host.antiXray());
         a.promised.put(item, amount);
         ((Ctx) a.ctx).step = "mine";
         a.phase("mine");

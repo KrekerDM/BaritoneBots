@@ -120,6 +120,20 @@ public final class WorldStore {
      * @return number of containers added
      */
     public int mergeDiscovered(String serverId, JsonArray found) {
+        return mergeDiscovered(serverId, found, (dim, pos, block) -> defaultRoles(block));
+    }
+
+    /** Roles for a container seen for the first time. */
+    public interface RoleChooser {
+        List<String> roles(String dim, Pos pos, String block);
+    }
+
+    /**
+     * Merges a {@code containers_nearby} answer; new containers get their roles from {@code chooser}.
+     *
+     * @return number of containers added
+     */
+    public int mergeDiscovered(String serverId, JsonArray found, RoleChooser chooser) {
         WorldDoc d = get(serverId);
         int added = 0;
         for (JsonElement e : found) {
@@ -135,7 +149,9 @@ public final class WorldStore {
             String block = Json.getString(o, "block", "minecraft:chest");
             WorldDoc.Container c = d.containerAt(dim, pos);
             if (c == null) {
-                d.containers.add(new WorldDoc.Container(Tokens.id("c"), dim, pos, block, defaultRoles(block), "", null, 0));
+                List<String> roles = chooser.roles(dim, pos, block);
+                d.containers.add(new WorldDoc.Container(Tokens.id("c"), dim, pos, block,
+                        roles == null ? List.of() : roles, "", null, 0));
                 added++;
             }
         }
@@ -145,8 +161,14 @@ public final class WorldStore {
         return added;
     }
 
+    /** Replaces a container's roles (autopilot category adoption). */
+    public void setRoles(String serverId, WorldDoc.Container c, List<String> roles) {
+        get(serverId).replaceContainer(c.withRoles(roles));
+        markDirty(serverId);
+    }
+
     /** Furnaces and crafting tables get their obvious role; chests and barrels stay unassigned. */
-    private static List<String> defaultRoles(String block) {
+    public static List<String> defaultRoles(String block) {
         String b = block == null ? "" : block;
         if (b.endsWith("furnace") || b.endsWith("smoker")) {
             return List.of("furnace");

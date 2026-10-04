@@ -79,6 +79,8 @@ public final class Manager implements LinkServer.Handler {
     public final GameDataService gameData;
     public final Planner planner;
     public final ProjectService projects;
+    public final io.github.krekerdm.baritonebots.manager.autopilot.Autopilot autopilot;
+    public final io.github.krekerdm.baritonebots.manager.goals.GoalRunner goals;
     public final LinkServer link;
     public final HttpApi http;
     private Tray tray;
@@ -112,6 +114,8 @@ public final class Manager implements LinkServer.Handler {
         gameData = new GameDataService(loop, installer::mcDir, config::get);
         planner = new Planner(this);
         projects = new ProjectService(this, planner, dataDir.resolve("projects"));
+        autopilot = new io.github.krekerdm.baritonebots.manager.autopilot.Autopilot(this, planner);
+        goals = new io.github.krekerdm.baritonebots.manager.goals.GoalRunner(this);
         link = new LinkServer(loop, this);
         http = new HttpApi(this);
     }
@@ -134,8 +138,12 @@ public final class Manager implements LinkServer.Handler {
             bots.sync(config.get());
             dispatcher.loadQueues();
             dispatcher.setHooks(planner);
-            planner.setAfterTick(projects::afterTick);
+            planner.setAfterTick(() -> {
+                projects.afterTick();
+                autopilot.afterTick();
+            });
             projects.load();
+            autopilot.sync(config.get());
             installer.init();
             config.addListener(this::onConfigChanged);
         });
@@ -357,6 +365,7 @@ public final class Manager implements LinkServer.Handler {
         }
         gameData.invalidate(nu);
         planner.retime();
+        autopilot.sync(nu);
     }
 
     // ------------------------------------------------------------------ link callbacks (loop)
@@ -436,6 +445,7 @@ public final class Manager implements LinkServer.Handler {
         }
         boolean online = b.online();
         sse.broadcast(SseHub.BOT, Json.obj("botId", b.id, "status", st));
+        autopilot.onStatus(b);
         if (online != wasOnline) {
             broadcastProcess(b);
             if (online) {
@@ -454,6 +464,8 @@ public final class Manager implements LinkServer.Handler {
             dispatcher.onDeath(b, ev);
         } else if (EventKinds.RESPAWNED.equals(ev.kind())) {
             dispatcher.onRespawned(b);
+        } else {
+            autopilot.onBotEvent(b, ev); // tool_low / food_low → refill at the next safe point
         }
     }
 

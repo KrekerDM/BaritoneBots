@@ -91,6 +91,7 @@ public final class GameData {
     private final Map<String, List<Recipe>> byResult;
     private final Map<String, List<Drop>> dropsByBlock;
     private final Map<String, List<String>> blocksByDrop;
+    private final Map<String, List<Recipe>> cookingByInput;
     private final int recipeCount;
 
     GameData(String source, Map<String, Set<String>> itemTags, Map<String, Set<String>> blockTags,
@@ -106,6 +107,15 @@ public final class GameData {
         r.replaceAll((k, v) -> v.stream().sorted(order).toList());
         this.byResult = Collections.unmodifiableMap(r);
         this.recipeCount = recipes.size();
+        Map<String, List<Recipe>> cooking = new LinkedHashMap<>();
+        for (Recipe rec : recipes) {
+            if (rec.cooking() && !rec.slots().isEmpty() && rec.slots().getFirst() != null) {
+                for (String in : rec.slots().getFirst()) {
+                    cooking.computeIfAbsent(in, k -> new ArrayList<>()).add(rec);
+                }
+            }
+        }
+        this.cookingByInput = Collections.unmodifiableMap(cooking);
         Map<String, List<Drop>> d = new LinkedHashMap<>();
         Map<String, List<String>> by = new LinkedHashMap<>();
         Map<String, Set<String>> guaranteed = new LinkedHashMap<>();
@@ -179,6 +189,11 @@ public final class GameData {
     /** Furnace-family recipes producing {@code item} (smelting, blasting, smoking, campfire cooking). */
     public List<Recipe> smeltingSources(String item) {
         return recipesFor(item).stream().filter(Recipe::cooking).toList();
+    }
+
+    /** Furnace-family recipes that accept {@code input} (what a furnace makes of it). */
+    public List<Recipe> cookingRecipesUsing(String input) {
+        return cookingByInput.getOrDefault(Ids.normalize(input), List.of());
     }
 
     /** Blocks whose loot (no silk touch, no shears) can contain {@code item}; guaranteed drops first. */

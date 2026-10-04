@@ -86,6 +86,9 @@ class LinkDispatchTest {
         m = new Manager(dir, true, true);
         m.initState();
         m.loop.awaitRun(() -> {
+            // these tests check exact task sequences; the autopilot has its own tests
+            m.config.patch(Json.obj("autopilot", Json.obj("supply", false, "sort", false, "idleWork", false,
+                    "discovery", false, "stuckSec", 0)));
             m.config.addItem("bots", Json.obj("id", "bot1", "username", "Bot1", "serverId", "main"));
             m.config.addItem("bots", Json.obj("id", "bot2", "username", "Bot2", "serverId", "main"));
             m.worlds.get("main").applySections(Json.obj(

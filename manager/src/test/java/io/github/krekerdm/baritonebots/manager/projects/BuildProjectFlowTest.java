@@ -202,6 +202,9 @@ class BuildProjectFlowTest {
         m.initState();
         TestSchematic.spongeV2(dir.resolve("schematics/wall.schem"), 8, 2, 1, "minecraft:stone");
         m.loop.awaitRun(() -> {
+            // exact task sequences are checked here; the autopilot has its own tests
+            m.config.patch(Json.obj("autopilot", Json.obj("supply", false, "sort", false, "idleWork", false,
+                    "discovery", false, "stuckSec", 0)));
             m.config.addItem("bots", Json.obj("id", "bot1", "username", "Bot1", "serverId", "main"));
             m.worlds.get("main").applySections(Json.obj("containers", Json.arr(Json.obj("dim", "minecraft:overworld",
                     "pos", Json.obj("x", 10, "y", 64, "z", 0), "block", "minecraft:chest", "roles", Json.arr("supply")))));

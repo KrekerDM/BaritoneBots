@@ -122,8 +122,15 @@ public final class Planner implements io.github.krekerdm.baritonebots.manager.ta
         return sources.containsKey(id);
     }
 
+    /** Queue origin prefix of the autopilot's work sources (sorting, idle work, discovery inspections, refills). */
+    public static final String ORIGIN_AUTOPILOT_PREFIX = "auto:";
+    /** Queue origin prefix of standing-order work. */
+    public static final String ORIGIN_ORDER_PREFIX = "order:";
+
+    /** Planner work: projects, the autopilot and standing orders. Manual (panel, scenario) entries replace it. */
     public static boolean isPlannerOrigin(String origin) {
-        return origin != null && origin.startsWith(TaskSpec.ORIGIN_PROJECT_PREFIX);
+        return origin != null && (origin.startsWith(TaskSpec.ORIGIN_PROJECT_PREFIX)
+                || origin.startsWith(ORIGIN_AUTOPILOT_PREFIX) || origin.startsWith(ORIGIN_ORDER_PREFIX));
     }
 
     // ------------------------------------------------------------------ the tick
@@ -220,7 +227,9 @@ public final class Planner implements io.github.krekerdm.baritonebots.manager.ta
                 a.locks.add(mt.item().lock());
             }
             assignments.put(b.id, a);
-            roles.assign(b.id, mt.item().role(), now);
+            if (mt.item().role() != null) {
+                roles.assign(b.id, mt.item().role(), now); // role-neutral items (autopilot idle work) keep the role
+            }
             try {
                 s.begin(a, b);
             } catch (RuntimeException e) {
