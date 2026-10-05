@@ -8,8 +8,8 @@ import java.util.Map;
 /**
  * Parses an owner command (the chat text after the prefix, SPEC §5.7e). Pure, unit-tested.
  * <p>
- * The first word is the verb (English or Russian alias, case-insensitive; the two-word Russian phrases «ко мне» and
- * «за мной» count as one), the rest are arguments in their original case. A word starting with {@code @} picks the
+ * The first word is the verb (English or Russian alias, case-insensitive; the two-word Russian phrases «ко мне»,
+ * «за мной», «сними защиту» and «не защищай» count as one), the rest are arguments in their original case. A word starting with {@code @} picks the
  * bots: {@code @all} / {@code @все}, {@code @any} / {@code @любой}, or a bot id / name. Unknown verbs keep their
  * text in {@link #verb()} with {@link #known()} false; an empty command is {@code help}.
  */
@@ -29,6 +29,8 @@ public record OwnerCommand(String verb, List<String> args, String target, boolea
     public static final String TRASH = "trash";
     public static final String PROGRESS = "progress";
     public static final String OBTAIN = "obtain";
+    public static final String PROTECT = "protect";
+    public static final String UNPROTECT = "unprotect";
     public static final String HELP = "help";
     public static final String TARGET_ALL = "all";
     public static final String TARGET_ANY = "any";
@@ -50,6 +52,9 @@ public record OwnerCommand(String verb, List<String> args, String target, boolea
             Map.entry("progress", PROGRESS), Map.entry("прогресс", PROGRESS), Map.entry("развитие", PROGRESS),
             Map.entry("obtain", OBTAIN), Map.entry("get", OBTAIN), Map.entry("добудь", OBTAIN),
             Map.entry("достань", OBTAIN), Map.entry("добыть", OBTAIN),
+            Map.entry("protect", PROTECT), Map.entry("защити", PROTECT), Map.entry("защитить", PROTECT),
+            Map.entry("защита", PROTECT), Map.entry("приват", PROTECT),
+            Map.entry("unprotect", UNPROTECT), Map.entry("снимизащиту", UNPROTECT), Map.entry("незащищай", UNPROTECT),
             Map.entry("help", HELP), Map.entry("помощь", HELP), Map.entry("?", HELP));
 
     /** Tier words of {@code progress}. */
@@ -64,7 +69,7 @@ public record OwnerCommand(String verb, List<String> args, String target, boolea
     public static OwnerCommand parse(String text) {
         String t = text == null ? "" : text.strip();
         String lower = t.toLowerCase(Locale.ROOT);
-        for (String phrase : List.of("ко мне", "за мной")) {
+        for (String phrase : List.of("ко мне", "за мной", "сними защиту", "не защищай")) {
             if (lower.equals(phrase) || lower.startsWith(phrase + " ")) {
                 t = phrase.replace(" ", "") + t.substring(phrase.length());
                 break;

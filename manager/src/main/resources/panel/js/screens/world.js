@@ -164,13 +164,49 @@ export function render(root, params, app) {
   }
 
   function zonesSection() {
-    const rows = world.zones.map((z, i) =>
-      h("tr", null, h("td", null, z.name || h("span", { class: "dim" }, t("world.unnamed"))), h("td", null, dimLabel(z.dim)), h("td", { class: "num" }, boxText(z.box) || ""), h("td", { class: "actions" }, removeBtn("zones", i, z.name || boxText(z.box)))),
+    // SPEC §5.7g: automatic zones can be kept (they become manual) or switched off; a switched-off
+    // zone stays listed so the next scan does not bring the house back.
+    const setZone = (i, patch, okKey) => save((w) => Object.assign(w.zones[i], patch), t(okKey));
+    const rows = world.zones.map((z, i) => {
+      const label = z.name || boxText(z.box);
+      const auto = z.source === "auto";
+      const actions = auto
+        ? z.off
+          ? [btn(t("world.zoneOn"), () => setZone(i, { off: false }, "world.zoneOnDone"), { ariaLabel: `${t("world.zoneOn")}: ${label}` })]
+          : [
+              btn(t("world.zoneKeep"), () => setZone(i, { source: "manual" }, "world.zoneKept"), { ariaLabel: `${t("world.zoneKeep")}: ${label}`, title: t("world.zoneKeepHint") }),
+              btn(t("world.zoneOff"), () => setZone(i, { off: true }, "world.zoneOffDone"), { ariaLabel: `${t("world.zoneOff")}: ${label}`, title: t("world.zoneOffHint") }),
+            ]
+        : [removeBtn("zones", i, label)];
+      return h(
+        "tr",
+        null,
+        h("td", null, z.name || h("span", { class: "dim" }, t(auto ? "world.zoneHouse" : "world.unnamed"))),
+        h("td", null, t(auto ? "world.zoneAuto" : "world.zoneManual")),
+        h("td", null, z.off ? h("span", { class: "st-warn" }, t("world.zoneIsOff")) : h("span", { class: "st-ok" }, t("world.zoneIsOn"))),
+        h("td", null, dimLabel(z.dim)),
+        h("td", { class: "num" }, boxText(z.box) || ""),
+        h("td", { class: "num" }, z.box ? sizeText(z.box) : ""),
+        h("td", { class: "actions" }, h("div", { class: "row-sm" }, actions)),
+      );
+    });
+    const note = h("span", { class: "field-hint", "aria-live": "polite" });
+    const find = btn(
+      t("world.findHouses"),
+      (e) =>
+        busy(e.currentTarget, async () => {
+          await api.post(`/api/world/${enc(serverId)}/houses`);
+          note.textContent = t("world.findHousesSent");
+        }),
+      { small: false },
     );
     return sec(
       "world.zones",
       h("p", { class: "small" }, t("world.zonesText")),
-      rows.length ? table([t("world.col.name"), t("world.col.dim"), t("world.col.box"), t("bot.qcol.actions")], rows) : h("p", { class: "empty" }, t("world.noZones")),
+      h("div", { class: "row" }, find, note),
+      rows.length
+        ? table([t("world.col.name"), t("world.col.source"), t("world.col.state"), t("world.col.dim"), t("world.col.box"), t("world.col.size"), t("bot.qcol.actions")], rows)
+        : h("p", { class: "empty" }, t("world.noZones")),
       h("h3", { class: "h3" }, t("world.addZone")),
       addForm(
         [
@@ -178,7 +214,7 @@ export function render(root, params, app) {
           { name: "dim", type: "dim", required: true, default: "minecraft:overworld" },
           { name: "box", type: "box", required: true, refs: true, refKinds: ["two", "manual"] },
         ],
-        (v) => save((w) => w.zones.push({ name: v.name, dim: v.dim, box: v.box })),
+        (v) => save((w) => w.zones.push({ name: v.name, dim: v.dim, box: v.box, source: "manual" })),
         "world.add",
       ),
     );

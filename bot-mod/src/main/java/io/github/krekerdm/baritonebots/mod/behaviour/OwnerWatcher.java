@@ -65,6 +65,9 @@ public final class OwnerWatcher {
         d.addProperty("text", c.text());
         d.addProperty("player", c.player());
         d.addProperty("via", c.via());
+        if (chat.ownerUnknown()) {
+            d.addProperty("candidate", true); // no owner yet: the manager only offers this player as the owner
+        }
         bot.event(EventKinds.OWNER_COMMAND, Levels.INFO, "owner command: " + c.text(), d);
         return true;
     }

@@ -20,8 +20,10 @@ import io.github.krekerdm.baritonebots.manager.tasks.JsonItemStore;
 import io.github.krekerdm.baritonebots.manager.tasks.QueueEntry;
 import io.github.krekerdm.baritonebots.manager.tasks.TaskQueue;
 import io.github.krekerdm.baritonebots.manager.tasks.Validators;
+import io.github.krekerdm.baritonebots.manager.util.Log;
 import io.github.krekerdm.baritonebots.manager.util.Os;
 import io.github.krekerdm.baritonebots.manager.world.WorldDoc;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -82,6 +84,7 @@ final class ApiRoutes {
         r.post("/api/scenarios/{id}/run", this::runScenario);
         store(r, "/api/kits", "kits", m.kits);
         world(r);
+        ownerRoutes(r);
         schematicRoutes(r);
         projects(r);
         ai(r);
@@ -214,6 +217,11 @@ final class ApiRoutes {
             m.supervisor.stopAll();
             return null;
         }));
+        // First run (SPEC §6): N bots with generated names Bot1..BotN on one server, started right away.
+        r.post("/api/bots/quick", q -> {
+            JsonObject body = q.json();
+            return loop(() -> quickBots(body));
+        });
         r.post("/api/bots", q -> {
             JsonObject body = q.json();
             return loop(() -> {
@@ -502,6 +510,68 @@ final class ApiRoutes {
         });
     }
 
+    /**
+     * {@code POST /api/bots/quick {count:1..20=2, serverId?, start:true}}: names {@code Bot1}, {@code Bot2}, ... not
+     * used yet (case-insensitive), ids from the names, the only server when {@code serverId} is missing; started
+     * bots install the runtime first when needed. Answers {@code {bots:[view]}}.
+     */
+    private JsonObject quickBots(JsonObject body) {
+        int count = Math.max(1, Math.min(20, Json.getInt(body, "count", 2)));
+        String sid = Json.getString(body, "serverId", "");
+        List<ManagerConfig.ServerProfile> servers = m.config.get().servers();
+        if (sid.isBlank()) {
+            if (servers.size() != 1) {
+                throw ApiException.badRequest("server_required", "choose the server for the new bots");
+            }
+            sid = servers.getFirst().id();
+        } else {
+            sid = server(sid).id();
+        }
+        java.util.Set<String> used = new java.util.HashSet<>();
+        m.config.get().bots().forEach(d -> used.add(String.valueOf(d.username()).toLowerCase(Locale.ROOT)));
+        JsonArray out = new JsonArray();
+        List<String> ids = new ArrayList<>();
+        for (int n = 1; ids.size() < count && n < 1000; n++) {
+            String name = "Bot" + n;
+            if (used.contains(name.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            JsonObject stored = m.config.addItem("bots", Json.obj("id", uniqueId(slug(name), "bots"), "username", name,
+                    "serverId", sid));
+            ids.add(Json.getString(stored, "id", ""));
+        }
+        boolean start = Json.getBool(body, "start", true);
+        for (String id : ids) {
+            BotState b = m.bots.require(id);
+            if (start) {
+                try {
+                    m.supervisor.start(b);
+                } catch (ApiException e) {
+                    Log.warn("quick start %s: %s", id, e.getMessage());
+                }
+            }
+            out.add(m.botView(b));
+        }
+        return Json.obj("bots", out);
+    }
+
+    // ------------------------------------------------------------------ owner (SPEC §5.7e)
+
+    private void ownerRoutes(Router r) {
+        r.get("/api/owner", q -> loop(() -> m.ownerDetect.view()));
+        r.post("/api/owner/confirm", q -> {
+            String player = Json.getString(q.json(), "player", "");
+            return loop(() -> {
+                m.ownerDetect.confirm(player);
+                return m.ownerDetect.view();
+            });
+        });
+        r.post("/api/owner/dismiss", q -> loop(() -> {
+            m.ownerDetect.dismiss();
+            return m.ownerDetect.view();
+        }));
+    }
+
     // ------------------------------------------------------------------ world
 
     private ManagerConfig.ServerProfile server(String id) {
@@ -530,6 +600,13 @@ final class ApiRoutes {
                 return doc.toJson();
             });
         });
+        // Houses: scan every place of the server again now (SPEC §5.7g); the result arrives as SSE "world".
+        r.post("/api/world/{serverId}/houses", q -> loop(() -> {
+            String sid = server(q.param("serverId")).id();
+            m.autopilot.houses().rescan(sid);
+            m.autopilot.houses().tick(System.currentTimeMillis());
+            return null;
+        }));
         r.post("/api/world/{serverId}/discover", q -> {
             JsonObject body = q.json();
             String botId = Json.getString(body, "botId", "");

@@ -8,16 +8,20 @@ import io.github.krekerdm.baritonebots.common.msg.TaskSpec;
 import io.github.krekerdm.baritonebots.common.msg.TaskTypes;
 import io.github.krekerdm.baritonebots.mod.BotRuntime;
 import io.github.krekerdm.baritonebots.mod.ModInfo;
+import io.github.krekerdm.baritonebots.mod.behaviour.ProtectionGuard;
 import io.github.krekerdm.baritonebots.mod.util.Interact;
 
 /**
  * Runs at most one task (SPEC §4.2): a new task replaces the current one (which reports {@code cancelled}),
  * {@code timeoutSec} is enforced here, and every started task produces exactly one {@code task_done}. After any
  * end the client is left neutral: task pause claims released, keys released, container closed, Baritone
- * processes cancelled.
+ * processes cancelled. A task that keeps running into protected blocks for {@value #PROTECTED_FAIL_MS} ms fails with
+ * reason {@code protected} (SPEC §5.7g).
  */
 public final class TaskManager {
     public static final String OWNER_PREFIX = "task:";
+    /** Refusals of the protection guard (less than 3 s apart) this long end the task with {@code protected}. */
+    public static final long PROTECTED_FAIL_MS = 20_000;
 
     private final BotRuntime bot;
     private TaskContext ctx;
@@ -75,6 +79,7 @@ public final class TaskManager {
         ctx = c;
         executor = ex;
         bot.status.markDirty();
+        ProtectionGuard.beginTask();
         try {
             ex.start(c);
         } catch (RuntimeException e) {
@@ -94,6 +99,11 @@ public final class TaskManager {
         int timeout = c.spec().timeoutSec();
         if (timeout > 0 && c.elapsedMs() >= timeout * 1000L) {
             end("timed out after " + timeout + " s", Reasons.TIMEOUT);
+            return;
+        }
+        if (ProtectionGuard.streakMs(System.currentTimeMillis()) >= PROTECTED_FAIL_MS) {
+            end("kept running into protected blocks for " + PROTECTED_FAIL_MS / 1000 + " s; last: "
+                    + ProtectionGuard.lastRefusal(), Reasons.PROTECTED);
             return;
         }
         c.advance();
@@ -160,6 +170,7 @@ public final class TaskManager {
         } catch (RuntimeException e) {
             ModInfo.LOG.error("Task {} cleanup failed", c.spec().id(), e);
         }
+        ProtectionGuard.endTask();
         neutralize(c);
         deliver(c);
     }

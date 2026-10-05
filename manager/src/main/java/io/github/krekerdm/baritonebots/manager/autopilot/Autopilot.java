@@ -61,6 +61,7 @@ public final class Autopilot {
     private final Map<String, Scan> scans = new HashMap<>();
     private final Map<String, Long> throttle = new HashMap<>();
     private final AttentionHold hold = new AttentionHold();
+    private final HouseScanner houses;
     private Categories categories;
     private List<ManagerConfig.Category> catDefs;
     private GameData catData;
@@ -74,6 +75,12 @@ public final class Autopilot {
         this.supply = new Supply(m, this);
         this.trash = new Trash(m, this);
         this.production = new ProductionWork(m, planner);
+        this.houses = new HouseScanner(m, planner, this);
+    }
+
+    /** Automatic house zones (SPEC §5.7g). */
+    public HouseScanner houses() {
+        return houses;
     }
 
     public Supply supply() {
@@ -202,6 +209,8 @@ public final class Autopilot {
         long now = System.currentTimeMillis();
         try {
             discovery(now);
+            houses.tick(now);
+            m.ownerDetect.tick(now);
         } catch (RuntimeException e) {
             io.github.krekerdm.baritonebots.manager.util.Log.error("autopilot discovery failed", e);
         }

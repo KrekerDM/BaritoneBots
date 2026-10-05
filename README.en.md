@@ -6,7 +6,7 @@
 ![Baritone](https://img.shields.io/badge/Baritone-1.19.0-3B82C4)
 ![Fabric](https://img.shields.io/badge/Fabric-0.19.5-DBD0B4)
 ![Java](https://img.shields.io/badge/Java-25-E76F00?logo=openjdk&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-269-2EA043)
+![Tests](https://img.shields.io/badge/Tests-280-2EA043)
 ![Status](https://img.shields.io/badge/Status-beta-D9A400)
 ![License](https://img.shields.io/badge/License-MIT-555555)
 
@@ -41,6 +41,12 @@ storage", "progress to iron" — and the manager splits the work between bots.
   are missing.
 - **Standing orders, schedules, if-then rules**: "always 64 bread in storage",
   "harvest every 30 minutes", "health below 6 — go home".
+- **Leaves your house alone**: planks, glass, doors, beds and other building
+  blocks are never broken, and the manager finds houses near waypoints and chests
+  by itself and puts zones around them where bots break and place nothing. In our
+  test the unprotected bot knocked out two glass blocks to cut the corner; with
+  protection it walked around the house in 11 s. `!b protect` protects the building
+  you look at.
 - **Anti-xray servers**: with hidden ores the bot branch-mines at the best height
   and only takes ore it can see.
 - **Companion plugin** for your own server: token check for bots, block journal
@@ -57,7 +63,7 @@ storage", "progress to iron" — and the manager splits the work between bots.
 
 ## Warning
 
-This is a beta. Mod, manager and plugin build and pass 269 tests, but some
+This is a beta. Mod, manager and plugin build and pass 280 tests, but some
 features have not been tried in a live game yet, and the panel has no screens
 for projects, schedules and rules yet — use the API for those. The table below
 lists what was checked on a real server.
@@ -104,15 +110,20 @@ normal 1024 MB or performance 2048 MB.
 2. Download `baritonebots-manager-*.jar` from [Releases](https://github.com/KrekerDM/BaritoneBots/releases) into an empty folder.
 3. Run:
    ```bash
-   java -jar baritonebots-manager-0.3.0-beta.1.jar
+   java -jar baritonebots-manager-0.3.0-beta.2.jar
    ```
    The panel opens in the browser; the manager prints the address with the token.
-4. Settings → Servers: server address. Turn on anti-xray in the profile if the
-   server hides ores.
-5. Settings → Bots: add bots with offline accounts.
-6. Settings → Runtime → Install. The manager downloads HeadlessMC, Fabric,
-   Fabric API, Baritone, FerriteCore and Minecraft 26.2.
-7. Start the bots and give tasks from the bot page.
+4. On the Bots page enter the server address and press "Add bots and start".
+   The manager picks names and passwords for two bots, downloads HeadlessMC,
+   Fabric, Baritone and Minecraft 26.2 once (175 MB) and starts the bots. In our
+   test both bots were in the game after 150 s.
+5. Join the server. If you are the only player, the panel asks "Is that you?".
+   With more players, write `!b help` in the chat and the panel offers you.
+   Press "Yes, that is me": the bots now take your chat commands.
+
+The bots find the home point, the chests and your house by themselves. If the
+server hides ores, turn on anti-xray in Settings → Servers. Every step and what
+is still manual: [docs/dev/AUTOMATION-AUDIT.md](docs/dev/AUTOMATION-AUDIT.md) (Russian).
 
 Data lives in `BaritoneBots-data` next to the jar: settings, the panel token,
 bot passwords. Do not publish that folder.
@@ -168,6 +179,8 @@ decisions taken during development: [docs/dev/DECISIONS.md](docs/dev/DECISIONS.m
   storage gets inspected first.
 - Honest resources only: whatever a bot cannot mine, craft or smelt ends up on a
   "please supply" list.
+- A bot does not break ore inside a protection zone and stops with the reason
+  "protected zone": Baritone cannot leave single blocks out of its ore search.
 - Mining under anti-xray is slower: the bot branch-mines instead of heading to the ore.
 - The AI works only through a local Ollama: a 7B model needs about 5 GB of
   memory and answers in seconds. There are no cloud models.

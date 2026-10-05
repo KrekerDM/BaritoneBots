@@ -12,6 +12,8 @@ public final class Reasons {
     public static final String CONTAINER_FAILED = "container_failed";
     public static final String MISSING_MATERIALS = "missing_materials";
     public static final String STUCK = "stuck";
+    /** The way or the target lies in a protection zone / is a protected block: the bot refused to break or place. */
+    public static final String PROTECTED = "protected";
     public static final String DIED = "died";
     public static final String DISCONNECTED = "disconnected";
     public static final String BAD_ARGS = "bad_args";
@@ -19,7 +21,7 @@ public final class Reasons {
     public static final String ERROR = "error";
 
     public static final List<String> ALL = List.of(CANCELLED, TIMEOUT, PATH_FAILED, NOT_FOUND, INVENTORY_FULL,
-            CONTAINER_FAILED, MISSING_MATERIALS, STUCK, DIED, DISCONNECTED, BAD_ARGS, UNSUPPORTED, ERROR);
+            CONTAINER_FAILED, MISSING_MATERIALS, STUCK, PROTECTED, DIED, DISCONNECTED, BAD_ARGS, UNSUPPORTED, ERROR);
 
     private Reasons() {
     }

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -56,7 +57,13 @@ class OwnerChatTest {
         assertNull(c.fromSystem("<Mallory> Krekerdm: !b stop"), "the first matching pattern decides the speaker");
         assertNull(c.fromSystem("[G] Mallory: Krekerdm: !b stop"));
         assertNull(c.fromSystem("Server restarting in 5 minutes"));
-        assertNull(chat("").fromSystem("<Krekerdm> !b come"), "no owner configured = feature off");
+        OwnerChat none = chat("");
+        assertTrue(none.ownerUnknown());
+        assertEquals("Steve", none.fromSystem("<Steve> !b come").player(),
+                "no owner configured: any player's command is passed on as an owner candidate");
+        assertEquals("come", none.fromPlayer("Alex", "!b come", false).text());
+        assertNull(none.fromPlayer("Alex", "hello", false), "still only lines with the prefix");
+        assertFalse(chat("Krekerdm").ownerUnknown());
     }
 
     @Test

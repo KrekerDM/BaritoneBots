@@ -263,7 +263,7 @@ final class AutoDetect {
         WorldDoc doc = ctx.doc();
         if (doc != null) {
             for (WorldDoc.Zone z : doc.zones) {
-                if (Dims.normalize(z.dim()).equals(dim)) {
+                if (z.active() && Dims.normalize(z.dim()).equals(dim)) {
                     out.add(z.box());
                 }
             }

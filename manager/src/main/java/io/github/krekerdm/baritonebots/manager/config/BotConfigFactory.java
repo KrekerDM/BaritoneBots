@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import io.github.krekerdm.baritonebots.common.json.Json;
 import io.github.krekerdm.baritonebots.common.msg.BotConfig;
+import io.github.krekerdm.baritonebots.manager.world.HouseBlocks;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -12,8 +13,8 @@ import java.util.Map;
 
 /**
  * Builds the {@link BotConfig} a bot receives in {@code welcome}/{@code config}: global defaults, then the server
- * profile, then the bot's own overrides, plus secrets (password, companion token) and the protected zones of the
- * world knowledge.
+ * profile, then the bot's own overrides, plus secrets (password, companion token), the active protected zones of the
+ * world knowledge and the built-block list ({@code protection.builtNoBreak}).
  */
 public final class BotConfigFactory {
     private BotConfigFactory() {
@@ -43,6 +44,12 @@ public final class BotConfigFactory {
             }
             worldZones.forEach(z -> zones.add(zoneOnly(z)));
             protection.add("zones", zones);
+            // SPEC §5.7g: built blocks (planks, glass, doors, ...) are never broken outside the task's own box.
+            protection.add("built", Json.getBool(protection, "builtNoBreak", true)
+                    ? Json.arrOf(HouseBlocks.NO_BREAK) : new JsonArray());
+            for (String k : List.of("autoHouse", "houseRadius", "builtNoBreak")) {
+                protection.remove(k); // manager-side settings
+            }
             o.add("protection", protection);
         }
         o.add("behaviour", Json.deepMerge(cfg.behaviour(), bot.behaviour()));

@@ -33,9 +33,14 @@ public final class EventKinds {
      * player, via (chat | whisper | system), pos, dim, yaw, pitch, lookBlock, lookBlockId (null when unknown).
      */
     public static final String OWNER_COMMAND = "owner_command";
+    /**
+     * The protection guard refused to break or place (first refusal of a streak, at most one per 30 s);
+     * data.action (break | place), pos, block, why (zone | noBreak | built).
+     */
+    public static final String PROTECTED = "protected";
 
     public static final List<String> ALL = List.of(JOINED, DISCONNECTED, KICKED, LOGIN_OK, LOGIN_FAILED, DEATH,
-            RESPAWNED, DAMAGED, THREAT, INVENTORY_FULL, TOOL_LOW, FOOD_LOW, CHAT, COMPANION, ERROR, OWNER_COMMAND);
+            RESPAWNED, DAMAGED, THREAT, INVENTORY_FULL, TOOL_LOW, FOOD_LOW, CHAT, COMPANION, ERROR, OWNER_COMMAND, PROTECTED);
 
     /** {@code companion} event states. */
     public static final String COMPANION_VERIFIED = "verified";

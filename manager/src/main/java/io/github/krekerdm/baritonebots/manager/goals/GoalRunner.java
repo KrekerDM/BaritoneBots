@@ -317,10 +317,8 @@ public final class GoalRunner {
             fail(b, e, run, "bot position unknown");
             return;
         }
-        List<Pos> candidates = new ArrayList<>();
-        for (int[] o : new int[][]{{2, 0}, {-2, 0}, {0, 2}, {0, -2}, {2, 2}, {-2, -2}, {2, -2}, {-2, 2}}) {
-            candidates.add(at.offset(o[0], 0, o[1]));
-        }
+        String botDim = b.status != null && b.status.dim() != null ? Dims.normalize(b.status.dim()) : Dims.OVERWORLD;
+        List<Pos> candidates = placeSpots(at, m.zoneBoxes(b.def.serverId(), botDim));
         Map<Pos, String> blocks = new HashMap<>();
         int[] pending = {candidates.size() * 2};
         Runnable decide = () -> {
@@ -350,6 +348,37 @@ public final class GoalRunner {
                 });
             }
         }
+    }
+
+    /**
+     * Spots for a table / furnace: 8 around the bot, 2 blocks away, outside protection zones (SPEC §5.7g: a bot never
+     * places anything in the user's house); when the bot stands inside a zone, the spots just outside that zone's walls
+     * at the bot's height instead.
+     */
+    static List<Pos> placeSpots(Pos at, List<Box> zones) {
+        List<Pos> out = new ArrayList<>();
+        for (int[] o : new int[][]{{2, 0}, {-2, 0}, {0, 2}, {0, -2}, {2, 2}, {-2, -2}, {2, -2}, {-2, 2}}) {
+            Pos p = at.offset(o[0], 0, o[1]);
+            if (zones.stream().noneMatch(z -> z.contains(p))) {
+                out.add(p);
+            }
+        }
+        if (out.isEmpty()) {
+            for (Box z : zones) {
+                if (z.contains(at)) {
+                    for (Pos p : List.of(new Pos(z.min().x() - 2, at.y(), at.z()), new Pos(z.max().x() + 2, at.y(), at.z()),
+                            new Pos(at.x(), at.y(), z.min().z() - 2), new Pos(at.x(), at.y(), z.max().z() + 2))) {
+                        if (zones.stream().noneMatch(o -> o.contains(p))) {
+                            out.add(p);
+                        }
+                    }
+                }
+            }
+        }
+        if (out.isEmpty()) {
+            out.add(at.offset(2, 0, 0)); // nowhere free: the guard refuses it inside a zone and the goal reports it
+        }
+        return out;
     }
 
     static boolean replaceable(String block) {

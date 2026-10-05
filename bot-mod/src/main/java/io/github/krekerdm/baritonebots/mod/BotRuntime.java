@@ -27,6 +27,7 @@ import io.github.krekerdm.baritonebots.mod.behaviour.Eater;
 import io.github.krekerdm.baritonebots.mod.behaviour.LifeBehaviour;
 import io.github.krekerdm.baritonebots.mod.behaviour.LoginBehaviour;
 import io.github.krekerdm.baritonebots.mod.behaviour.OwnerWatcher;
+import io.github.krekerdm.baritonebots.mod.behaviour.ProtectionGuard;
 import io.github.krekerdm.baritonebots.mod.behaviour.StatusReporter;
 import io.github.krekerdm.baritonebots.mod.link.CompanionBridge;
 import io.github.krekerdm.baritonebots.mod.link.LinkClient;
@@ -34,7 +35,6 @@ import io.github.krekerdm.baritonebots.mod.lowpower.LowPower;
 import io.github.krekerdm.baritonebots.mod.query.QueryHandler;
 import io.github.krekerdm.baritonebots.mod.task.TaskManager;
 import io.github.krekerdm.baritonebots.mod.util.Interact;
-import io.github.krekerdm.baritonebots.mod.util.McIds;
 import io.github.krekerdm.baritonebots.mod.util.RateLimiter;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -44,9 +44,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.ChatType;
-import net.minecraft.world.level.block.Block;
 
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -344,10 +342,15 @@ public final class BotRuntime {
 
     private void applyBaritoneSettings() {
         BotConfig cfg = config;
-        List<Block> protectedBlocks = cfg.protection().enabled()
-                ? McIds.blocksMatching(cfg.protection().noBreak()) : List.of();
-        for (String problem : settingsApplier.apply(cfg.baritone(), protectedBlocks)) {
+        for (String problem : settingsApplier.apply(cfg.baritone(), ProtectionGuard.noBreakBlocks(cfg))) {
             warn(problem);
+        }
+    }
+
+    /** Re-merges the protected blocks into Baritone's {@code blocksToDisallowBreaking} (task area / learned blocks). */
+    public void refreshNoBreak() {
+        if (baritone != null) {
+            settingsApplier.updateProtected(ProtectionGuard.noBreakBlocks(config));
         }
     }
 

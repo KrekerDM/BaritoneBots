@@ -9,6 +9,7 @@ import io.github.krekerdm.baritonebots.common.msg.EventKinds;
 import io.github.krekerdm.baritonebots.common.msg.Levels;
 import io.github.krekerdm.baritonebots.common.msg.Reasons;
 import io.github.krekerdm.baritonebots.mod.baritone.SettingsOverride;
+import io.github.krekerdm.baritonebots.mod.behaviour.ProtectionGuard;
 import io.github.krekerdm.baritonebots.mod.task.TaskArgs;
 import io.github.krekerdm.baritonebots.mod.task.TaskContext;
 import io.github.krekerdm.baritonebots.mod.task.TaskExecutor;
@@ -87,6 +88,7 @@ public final class MineTask implements TaskExecutor {
             }
         }
         before = Inv.totals(ctx.player(), false);
+        ProtectionGuard.setTargets(blocks); // a target inside a zone is refused, but never learned as "do not break"
         ctx.baritone().getMineProcess().mineByName(amount, ids.toArray(String[]::new));
         ctx.step(("legit".equals(strategy) ? "legit mining " : "mining ") + String.join(",", ids), amount > 0 ? 0 : -1);
     }

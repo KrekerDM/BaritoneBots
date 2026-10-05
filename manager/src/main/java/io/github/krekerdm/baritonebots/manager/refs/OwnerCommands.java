@@ -21,6 +21,7 @@ import io.github.krekerdm.baritonebots.manager.projects.Project;
 import io.github.krekerdm.baritonebots.manager.tasks.TaskCatalog;
 import io.github.krekerdm.baritonebots.manager.tasks.TaskQueue;
 import io.github.krekerdm.baritonebots.manager.util.Log;
+import io.github.krekerdm.baritonebots.manager.world.HouseBlocks;
 import io.github.krekerdm.baritonebots.manager.world.WorldDoc;
 
 import java.io.IOException;
@@ -65,7 +66,11 @@ public final class OwnerCommands {
         String sid = b.def.serverId();
         JsonObject d = ev.data() == null ? new JsonObject() : ev.data();
         String text = Json.getString(d, "text", "");
-        if (sid == null || m.config.get().general().ownerOrNull() == null) {
+        if (sid == null) {
+            return;
+        }
+        if (m.config.get().general().ownerOrNull() == null) {
+            m.ownerDetect.onCommand(b, d); // no owner yet: offer the player in the panel, run nothing
             return;
         }
         long now = System.currentTimeMillis();
@@ -105,6 +110,8 @@ public final class OwnerCommands {
             case OwnerCommand.STOP -> stop(b, sid, cmd, whisper);
             case OwnerCommand.BUILD -> build(b, sid, cmd, owner, dim);
             case OwnerCommand.FARM, OwnerCommand.RANCH -> fieldProject(b, sid, cmd, dim);
+            case OwnerCommand.PROTECT -> protect(b, sid, cmd, owner, dim);
+            case OwnerCommand.UNPROTECT -> unprotect(b, sid, owner, dim);
             case OwnerCommand.TRASH -> {
                 String to = trashTarget(cmd.arg(0));
                 queue(b, sid, cmd, whisper, true, Json.obj("type", "trash", "args", Json.obj("to", to)), "trash");
@@ -467,6 +474,69 @@ public final class OwnerCommands {
         };
     }
 
+    // ------------------------------------------------------------------ protection (SPEC §5.7g)
+
+    /**
+     * {@code protect [name]}: the structure the owner looks at (else stands in) becomes a manual zone — the cluster of
+     * built blocks there, {@link HouseBlocks#zoneOf}; without one, 9 × 8 × 9 blocks around the point. Switched-off
+     * zones it touches are dropped (the owner wants protection there now).
+     */
+    private void protect(BotState b, String sid, OwnerCommand cmd, Refs.Owner owner, String dim) {
+        if (owner == null) {
+            reply(b, "notSeen", Map.of());
+            return;
+        }
+        ManagerConfig.ServerProfile server = m.config.get().server(sid).orElse(null);
+        if (server == null || !Json.getBool(server.protection(), "enabled", true)) {
+            reply(b, "protectOff", Map.of());
+            return;
+        }
+        Pos at = owner.look() != null && owner.look().distance(owner.pos()) <= 32 ? owner.look() : owner.pos();
+        String name = String.join(" ", cmd.args()).trim();
+        m.autopilot.houses().structureAt(sid, dim, at, (box, found) -> {
+            WorldDoc doc = m.worlds.get(sid);
+            doc.zones.removeIf(z -> z.off() && z.dim().equals(dim) && z.box().intersects(box));
+            doc.zones.add(new WorldDoc.Zone(trim80(name), dim, box, WorldDoc.SOURCE_MANUAL, false));
+            m.worlds.markDirty(sid);
+            m.broadcastWorld(sid);
+            m.pushConfigForServer(sid);
+            Map<String, Object> args = xyz(box.min());
+            args.put("w", box.width());
+            args.put("h", box.height());
+            args.put("l", box.length());
+            reply(b, found ? "protected" : "protectedBox", args);
+        });
+    }
+
+    /** {@code unprotect}: zones at the point the owner looks at (else stands): automatic ones off, manual ones removed. */
+    private void unprotect(BotState b, String sid, Refs.Owner owner, String dim) {
+        if (owner == null) {
+            reply(b, "notSeen", Map.of());
+            return;
+        }
+        WorldDoc doc = m.worlds.get(sid);
+        List<WorldDoc.Zone> hit = new ArrayList<>();
+        for (Pos p : owner.look() == null ? List.of(owner.pos()) : List.of(owner.look(), owner.pos())) {
+            doc.zonesNear(dim, p, 0).stream().filter(WorldDoc.Zone::active).filter(z -> !hit.contains(z)).forEach(hit::add);
+        }
+        if (hit.isEmpty()) {
+            reply(b, "noZone", Map.of());
+            return;
+        }
+        for (WorldDoc.Zone z : hit) {
+            int i = doc.zones.indexOf(z);
+            if (z.auto()) {
+                doc.zones.set(i, new WorldDoc.Zone(z.name(), z.dim(), z.box(), z.source(), true));
+            } else {
+                doc.zones.remove(i);
+            }
+        }
+        m.worlds.markDirty(sid);
+        m.broadcastWorld(sid);
+        m.pushConfigForServer(sid);
+        reply(b, "unprotected", Map.of("n", hit.size()));
+    }
+
     // ------------------------------------------------------------------ replies
 
     private String help() {
@@ -479,8 +549,13 @@ public final class OwnerCommands {
 
     /** Whispers {@code owner.reply.<key>} to the owner from {@code b} (rate-limited per server). */
     void reply(BotState b, String key, Map<String, ?> args) {
+        replyTo(b, m.config.get().general().ownerOrNull(), key, args);
+    }
+
+    /** Whispers {@code owner.reply.<key>} to {@code player} from {@code b} (rate-limited per server). */
+    void replyTo(BotState b, String player, String key, Map<String, ?> args) {
         ManagerConfig.General g = m.config.get().general();
-        String owner = g.ownerOrNull();
+        String owner = player;
         if (owner == null || b == null || !b.linked() || b.def.serverId() == null) {
             return;
         }

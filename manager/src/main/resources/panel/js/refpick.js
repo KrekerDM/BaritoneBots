@@ -34,7 +34,8 @@ export function autoAvailable(what, arg, type) {
 }
 
 export function ownerName() {
-  return store.settings?.config?.general?.ownerPlayer || "";
+  // store.owner follows owner detection live (SPEC §5.7e); the settings copy may be older.
+  return store.owner?.player || store.settings?.config?.general?.ownerPlayer || "";
 }
 
 function worldOf(ctx) {

@@ -118,7 +118,29 @@ public final class WorldDoc {
         }
     }
 
-    public record Zone(String name, String dim, Box box) {
+    /**
+     * A protection zone (SPEC §5.6, §5.7g). {@code source}: {@code manual} (panel, settings, owner {@code protect}) or
+     * {@code auto} (a house found by the manager; refreshed, never shrunk). {@code off}: the user switched an automatic
+     * zone off; it stays as a marker so the next scan does not bring the house back, and is not sent to the bots.
+     */
+    public record Zone(String name, String dim, Box box, String source, boolean off) {
+        public Zone {
+            name = name == null ? "" : name;
+            source = SOURCE_AUTO.equals(source) ? SOURCE_AUTO : SOURCE_MANUAL;
+        }
+
+        public Zone(String name, String dim, Box box) {
+            this(name, dim, box, SOURCE_MANUAL, false);
+        }
+
+        public boolean auto() {
+            return SOURCE_AUTO.equals(source);
+        }
+
+        /** Protects right now (not switched off). */
+        public boolean active() {
+            return !off;
+        }
     }
 
     public record Death(String botId, String dim, Pos pos, String cause, long time) {
@@ -175,6 +197,56 @@ public final class WorldDoc {
         }
     }
 
+    /**
+     * Merges houses found by a scan ({@link HouseBlocks#houseZones}) into the zones of {@code dim}: a house that touches
+     * a switched-off zone or lies inside a manual one is skipped; automatic zones it touches are replaced by their union
+     * with it (a zone never shrinks on its own); anything else becomes a new automatic zone.
+     *
+     * @return number of zones added or grown
+     */
+    public int mergeHouseZones(String dim, List<Box> houses) {
+        int changed = 0;
+        for (Box h : houses) {
+            boolean skip = false;
+            Box merged = h;
+            List<Zone> touched = new ArrayList<>();
+            for (Zone z : zones) {
+                if (!z.dim().equals(dim) || !z.box().intersects(h)) {
+                    continue;
+                }
+                if (z.off() || !z.auto() && z.box().contains(h)) {
+                    skip = true;
+                    break;
+                }
+                if (z.auto()) {
+                    touched.add(z);
+                    merged = merged.union(z.box());
+                }
+            }
+            if (skip) {
+                continue;
+            }
+            if (touched.size() == 1 && touched.getFirst().box().equals(merged)) {
+                continue; // already covered
+            }
+            zones.removeAll(touched);
+            zones.add(new Zone("", dim, merged, SOURCE_AUTO, false));
+            changed++;
+        }
+        return changed;
+    }
+
+    /** Active zones of {@code dim} that contain {@code p} or come within {@code slack} blocks of it. */
+    public List<Zone> zonesNear(String dim, Pos p, int slack) {
+        List<Zone> out = new ArrayList<>();
+        for (Zone z : zones) {
+            if (z.dim().equals(dim) && z.box().expand(slack).contains(p)) {
+                out.add(z);
+            }
+        }
+        return out;
+    }
+
     public void addDeath(Death d) {
         deaths.add(d);
         while (deaths.size() > MAX_DEATHS) {
@@ -205,7 +277,14 @@ public final class WorldDoc {
         }
         if (body.has("zones")) {
             List<Zone> l = new ArrayList<>();
-            each(body, "zones", (o, p) -> l.add(new Zone(Json.getString(o, "name", ""), dim(o, p), box(o, p))));
+            each(body, "zones", (o, p) -> {
+                String source = Json.getString(o, "source", SOURCE_MANUAL);
+                if (!SOURCE_MANUAL.equals(source) && !SOURCE_AUTO.equals(source)) {
+                    throw ValidationException.of(p + ".source", "enum");
+                }
+                l.add(new Zone(Json.getString(o, "name", ""), dim(o, p), box(o, p), source,
+                        Json.getBool(o, "off", false)));
+            });
             zones.clear();
             zones.addAll(l);
         }

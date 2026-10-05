@@ -38,6 +38,7 @@ const EVENT_KINDS = [
   "task_failed",
   "task_done",
   "stuck",
+  "protected",
   "crashed",
   "link_lost",
   "project_blocked",

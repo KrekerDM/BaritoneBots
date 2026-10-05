@@ -174,7 +174,7 @@ public final class SettingsSchema {
         l.add(f("general.link.bind", STRING, "127.0.0.1").applies(MANAGER_RESTART));
         l.add(num("general.link.port", INT, 25590, 1, 65535, null).applies(MANAGER_RESTART));
         l.add(f("general.tray", BOOL, true).applies(MANAGER_RESTART));
-        l.add(f("general.autoStartBots", BOOL, false));
+        l.add(f("general.autoStartBots", BOOL, true));
         l.add(num("general.eventLogLimit", INT, 500, 50, 10000, "events"));
     }
 
@@ -246,6 +246,10 @@ public final class SettingsSchema {
         l.add(f("servers[].protection.enabled", BOOL, at(protection, "enabled")));
         l.add(f("servers[].protection.noBreak", STRING_LIST, at(protection, "noBreak")));
         l.add(f("servers[].protection.zones", JSON, new JsonArray()));
+        // SPEC §5.7g: houses near home are found and protected on their own; built blocks are never broken.
+        l.add(f("servers[].protection.autoHouse", BOOL, true));
+        l.add(num("servers[].protection.houseRadius", INT, 48, 8, 96, "blocks"));
+        l.add(f("servers[].protection.builtNoBreak", BOOL, true));
         l.add(f("servers[].baritone", MAP, new JsonObject()));
         l.add(choice("servers[].antiXray", ENUM, "none", List.of("none", "hide", "fake")));
         l.add(f("servers[].dayStart", STRING, "07:00"));

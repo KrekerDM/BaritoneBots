@@ -13,6 +13,8 @@ import io.github.krekerdm.baritonebots.common.geom.Box;
 import io.github.krekerdm.baritonebots.common.json.Json;
 import io.github.krekerdm.baritonebots.common.msg.Reasons;
 import io.github.krekerdm.baritonebots.common.msg.TaskTypes;
+import io.github.krekerdm.baritonebots.mod.behaviour.ProtectionGuard;
+import io.github.krekerdm.baritonebots.mod.behaviour.ProtectionRules;
 import io.github.krekerdm.baritonebots.mod.task.TaskArgs;
 import io.github.krekerdm.baritonebots.mod.task.TaskContext;
 import io.github.krekerdm.baritonebots.mod.task.TaskExecutor;
@@ -65,6 +67,8 @@ public final class SelectionTask implements TaskExecutor {
             ctx.fail(Reasons.BAD_ARGS, "selection needs 'box'", null);
             return;
         }
+        // The user chose this box: the bot may break and place inside it even in a protection zone (SPEC §5.7g).
+        ProtectionGuard.allowArea(box, ProtectionRules.Mode.AREA);
         BlockPos min = Positions.toBlockPos(box.min());
         BlockPos max = Positions.toBlockPos(box.max());
         IBuilderProcess builder = ctx.baritone().getBuilderProcess();

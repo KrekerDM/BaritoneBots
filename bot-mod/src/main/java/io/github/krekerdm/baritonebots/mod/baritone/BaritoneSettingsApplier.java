@@ -31,10 +31,14 @@ public final class BaritoneSettingsApplier {
     private static final String DISALLOW_BREAKING = "blockstodisallowbreaking";
 
     private final Set<String> applied = new HashSet<>();
+    /** {@code blocksToDisallowBreaking} before the protected blocks were merged in. */
+    private List<Block> baseDisallow;
+    private boolean baseFromConfig;
 
     /**
      * @param values          setting name → JSON value ({@code null} JSON resets to default)
-     * @param protectedBlocks blocks added to {@code blocksToDisallowBreaking} (protection.noBreak)
+     * @param protectedBlocks blocks added to {@code blocksToDisallowBreaking} (protection.noBreak / built, see
+     *                        {@code ProtectionGuard#noBreakBlocks})
      * @return human-readable problems (unknown names, bad values); empty when everything applied
      */
     public List<String> apply(Map<String, JsonElement> values, List<Block> protectedBlocks) {
@@ -77,17 +81,33 @@ public final class BaritoneSettingsApplier {
             }
         }
 
-        if (!protectedBlocks.isEmpty()) {
-            List<Block> merged = new ArrayList<>(settings.blocksToDisallowBreaking.value);
-            for (Block b : protectedBlocks) {
-                if (!merged.contains(b)) {
-                    merged.add(b);
-                }
+        baseDisallow = new ArrayList<>(settings.blocksToDisallowBreaking.value);
+        baseFromConfig = applied.contains(DISALLOW_BREAKING);
+        updateProtected(protectedBlocks);
+        return problems;
+    }
+
+    /**
+     * {@code blocksToDisallowBreaking} = the value from the last {@link #apply} (Baritone default or config) plus
+     * {@code protectedBlocks}; called again when the protected set changes during a task.
+     */
+    public void updateProtected(List<Block> protectedBlocks) {
+        Settings settings = BaritoneAPI.getSettings();
+        if (baseDisallow == null) {
+            baseDisallow = new ArrayList<>(settings.blocksToDisallowBreaking.value);
+        }
+        List<Block> merged = new ArrayList<>(baseDisallow);
+        for (Block b : protectedBlocks) {
+            if (!merged.contains(b)) {
+                merged.add(b);
             }
-            settings.blocksToDisallowBreaking.value = merged;
+        }
+        settings.blocksToDisallowBreaking.value = merged;
+        if (protectedBlocks.isEmpty() && !baseFromConfig) {
+            applied.remove(DISALLOW_BREAKING);
+        } else {
             applied.add(DISALLOW_BREAKING);
         }
-        return problems;
     }
 
     /** Routes Baritone's chat output to {@code sink} instead of the chat HUD. */

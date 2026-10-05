@@ -87,6 +87,8 @@ public final class Manager implements LinkServer.Handler {
     public final io.github.krekerdm.baritonebots.manager.refs.RefResolver refs;
     /** In-game owner commands (SPEC §5.7e). */
     public final io.github.krekerdm.baritonebots.manager.refs.OwnerCommands owner;
+    /** Owner detection while {@code general.ownerPlayer} is empty (SPEC §5.7e). */
+    public final io.github.krekerdm.baritonebots.manager.refs.OwnerDetect ownerDetect;
     /** Optional local AI: command box and project supervisor (SPEC §5.7c, §5.7d). */
     public final io.github.krekerdm.baritonebots.manager.ai.AiService ai;
     public final LinkServer link;
@@ -128,6 +130,7 @@ public final class Manager implements LinkServer.Handler {
         msLogin = new io.github.krekerdm.baritonebots.manager.process.MicrosoftLogin(this);
         refs = new io.github.krekerdm.baritonebots.manager.refs.RefResolver(this);
         owner = new io.github.krekerdm.baritonebots.manager.refs.OwnerCommands(this);
+        ownerDetect = new io.github.krekerdm.baritonebots.manager.refs.OwnerDetect(this);
         ai = new io.github.krekerdm.baritonebots.manager.ai.AiService(this);
         link = new LinkServer(loop, this);
         http = new HttpApi(this);
@@ -289,6 +292,37 @@ public final class Manager implements LinkServer.Handler {
         }
     }
 
+    /**
+     * Boxes of the active protection zones of a server in {@code dim}: world zones that are not switched off plus the
+     * profile's own {@code protection.zones}; empty while protection is off.
+     */
+    public List<io.github.krekerdm.baritonebots.common.geom.Box> zoneBoxes(String serverId, String dim) {
+        List<io.github.krekerdm.baritonebots.common.geom.Box> out = new java.util.ArrayList<>();
+        ManagerConfig.ServerProfile s = serverId == null ? null : config.get().server(serverId).orElse(null);
+        if (s == null || !Json.getBool(s.protection(), "enabled", true)) {
+            return out;
+        }
+        String d = io.github.krekerdm.baritonebots.common.geom.Dims.normalize(dim);
+        List<JsonObject> all = new java.util.ArrayList<>(worlds.zonesFor(s.id()));
+        com.google.gson.JsonArray own = Json.getArr(s.protection(), "zones");
+        if (own != null) {
+            own.forEach(z -> {
+                if (z.isJsonObject()) {
+                    all.add(z.getAsJsonObject());
+                }
+            });
+        }
+        for (JsonObject z : all) {
+            String zd = Json.getString(z, "dim", null);
+            var box = io.github.krekerdm.baritonebots.common.geom.Box.fromJson(z.get("box"));
+            if (box != null && (zd == null || zd.isBlank()
+                    || io.github.krekerdm.baritonebots.common.geom.Dims.normalize(zd).equals(d))) {
+                out.add(box);
+            }
+        }
+        return out;
+    }
+
     /** Re-sends configs to the bots of a server (protected zones live in the world document). */
     public void pushConfigForServer(String serverId) {
         for (BotState b : bots.all()) {
@@ -355,7 +389,7 @@ public final class Manager implements LinkServer.Handler {
         JsonArray servers = Json.getArr(config.viewForPanel(), "servers");
         return Json.obj("version", version, "bots", botsArr, "projects", Json.arrOf(projects.list()),
                 "servers", servers == null ? new JsonArray() : servers, "runtime", installer.view(),
-                "gameData", gameData.view(), "ai", ai.brief(),
+                "gameData", gameData.view(), "ai", ai.brief(), "owner", ownerDetect.view(),
                 "eventsTail", Json.arrOf(events.query(200, null, null)),
                 "language", config.get().general().language(), "time", System.currentTimeMillis());
     }
@@ -488,6 +522,9 @@ public final class Manager implements LinkServer.Handler {
             dispatcher.onRespawned(b);
         } else if (EventKinds.OWNER_COMMAND.equals(ev.kind())) {
             owner.onCommand(b, ev); // in-game command from the owner (SPEC §5.7e)
+        } else if (EventKinds.PROTECTED.equals(ev.kind())) {
+            b.protectedAt = System.currentTimeMillis(); // stuck recovery turns into "protected" (SPEC §5.7g)
+            b.protectedText = ev.message();
         } else {
             autopilot.onBotEvent(b, ev); // tool_low / food_low → refill at the next safe point
         }

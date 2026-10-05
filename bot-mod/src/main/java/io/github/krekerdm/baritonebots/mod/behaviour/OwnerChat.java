@@ -57,12 +57,24 @@ public final class OwnerChat {
     }
 
     public boolean enabled() {
-        return !owner.isEmpty();
+        return !prefix.isEmpty();
+    }
+
+    /**
+     * No owner configured yet: any player's prefixed line is passed on, so the manager can offer that player as the
+     * owner (SPEC §5.7e, owner detection); the manager runs nothing until the owner is confirmed.
+     */
+    public boolean ownerUnknown() {
+        return owner.isEmpty();
+    }
+
+    private boolean isOwner(String name) {
+        return owner.isEmpty() || name.equalsIgnoreCase(owner);
     }
 
     /** A chat message whose sender is known (signed or unsigned player chat). */
     public Command fromPlayer(String sender, String body, boolean whisper) {
-        if (!enabled() || sender == null || body == null || !sender.equalsIgnoreCase(owner)) {
+        if (!enabled() || sender == null || body == null || !isOwner(sender)) {
             return null;
         }
         String text = stripPrefix(body.strip());
@@ -85,7 +97,7 @@ public final class OwnerChat {
             if (name == null || msg == null) {
                 continue;
             }
-            if (!name.equalsIgnoreCase(owner)) {
+            if (!isOwner(name)) {
                 return null; // somebody else spoke; a later, looser pattern must not reinterpret the line
             }
             String text = stripPrefix(msg.strip());

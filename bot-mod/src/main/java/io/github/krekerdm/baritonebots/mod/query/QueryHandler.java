@@ -413,6 +413,14 @@ public final class QueryHandler {
 
     private JsonObject player(JsonObject args) {
         String name = Json.getString(args, "name", "");
+        if (name.isBlank()) {
+            // No name: everybody on the server's player list (tab list), for owner detection (SPEC §2.4).
+            JsonArray online = new JsonArray();
+            if (bot.mc.getConnection() != null) {
+                bot.mc.getConnection().getOnlinePlayers().forEach(i -> online.add(i.getProfile().name()));
+            }
+            return Json.obj("online", online);
+        }
         for (Player pl : bot.level().players()) {
             if (pl.getGameProfile().name().equalsIgnoreCase(name)) {
                 return Json.obj("found", true, "pos", Positions.json(pl.blockPosition()), "dim", McIds.dim(bot.level()));

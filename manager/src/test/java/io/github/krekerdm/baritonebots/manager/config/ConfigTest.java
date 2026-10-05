@@ -170,6 +170,16 @@ class ConfigTest {
         assertEquals(16, bc.login().password().length());
         assertEquals(1, bc.protection().zones().size());
         assertFalse(Json.toTree(BotConfigFactory.redacted(bc)).toString().contains(bc.login().password()));
+        // SPEC §5.7g: built blocks go to the bot by default; the manager-side house settings do not
+        assertTrue(bc.protection().built().contains("minecraft:*_planks"));
+        assertTrue(cfg.server("main").orElseThrow().protection().get("autoHouse").getAsBoolean());
+        assertEquals(48, cfg.server("main").orElseThrow().protection().get("houseRadius").getAsInt());
+        s.updateItem("servers", "main", Json.obj("protection", Json.obj("builtNoBreak", false)));
+        ManagerConfig off = s.get();
+        BotConfig noBuilt = BotConfigFactory.build(off, off.bot("b").orElseThrow(), off.server("main").orElseThrow(),
+                secrets, List.of());
+        assertTrue(noBuilt.protection().built().isEmpty());
+        assertTrue(noBuilt.protection().enabled());
     }
 
     @Test

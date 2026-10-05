@@ -8,6 +8,7 @@ import { processEl, botStateEl, num } from "../format.js";
 import { taskForm } from "../forms.js";
 import * as bv from "../botview.js";
 import { commandBox } from "../ai.js";
+import { setupPanel } from "../setup.js";
 
 const RUNNING = new Set(["installing", "starting", "linked", "online", "stopping"]);
 const STATUS_COLS = 10;
@@ -149,7 +150,7 @@ export function render(root, params, app) {
     }
     if (!bots.length) {
       rows.clear();
-      mount(listHost, h("div", { class: "stack" }, empty(t("bots.empty")), h("p", null, h("a", { href: "#/settings/bots" }, t("bots.addInSettings")))));
+      mount(listHost, h("div", { class: "stack" }, empty(t("bots.empty")), h("p", { class: "small" }, h("a", { href: "#/settings/bots" }, t("bots.addInSettings")))));
       summary.textContent = t("bots.summary", { n: 0, online: 0, busy: 0 });
       return;
     }
@@ -190,6 +191,7 @@ export function render(root, params, app) {
 
   const refresh = throttle(renderList, 500);
   const ai = commandBox({ botIds: () => [...selected], hint: t("ai.hintSelected") });
+  const setup = setupPanel();
 
   async function mountForm() {
     try {
@@ -232,6 +234,7 @@ export function render(root, params, app) {
         "div",
         { class: "stack" },
         h("div", { class: "head" }, h("h1", { class: "h1" }, t("bots.title")), h("div", { class: "row-sm" }, startAll, stopAll)),
+        setup.el,
         summary,
         listHost,
       ),
@@ -251,6 +254,7 @@ export function render(root, params, app) {
   return {
     update(type) {
       ai.update(type);
+      setup.update();
       if (type === "bot" || type === "process" || type === "queue" || type === "snapshot") refresh();
     },
   };

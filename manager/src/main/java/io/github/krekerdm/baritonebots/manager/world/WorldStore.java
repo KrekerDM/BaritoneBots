@@ -194,11 +194,13 @@ public final class WorldStore {
         return List.of();
     }
 
-    /** Protected zones of the server as {@code {dim, box}} objects for BotConfig. */
+    /** Active protected zones of the server as {@code {dim, box}} objects for BotConfig (switched-off ones left out). */
     public List<JsonObject> zonesFor(String serverId) {
         List<JsonObject> out = new ArrayList<>();
         for (WorldDoc.Zone z : get(serverId).zones) {
-            out.add(Json.obj("dim", z.dim(), "box", z.box()));
+            if (z.active()) {
+                out.add(Json.obj("dim", z.dim(), "box", z.box()));
+            }
         }
         return out;
     }

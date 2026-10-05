@@ -23,6 +23,15 @@ class OwnerCommandTest {
     }
 
     @Test
+    void protectionCommands() {
+        assertEquals(OwnerCommand.PROTECT, OwnerCommand.parse("protect").verb());
+        assertEquals(List.of("склад"), OwnerCommand.parse("защити склад").args());
+        assertEquals(OwnerCommand.UNPROTECT, OwnerCommand.parse("unprotect").verb());
+        assertEquals(OwnerCommand.UNPROTECT, OwnerCommand.parse("сними защиту").verb());
+        assertEquals(OwnerCommand.UNPROTECT, OwnerCommand.parse("Не защищай").verb());
+    }
+
+    @Test
     void russianAliasesAndPhrases() {
         assertEquals(OwnerCommand.COME, OwnerCommand.parse("ко мне").verb());
         assertEquals(OwnerCommand.COME, OwnerCommand.parse("Ко мне @все").verb());

@@ -9,6 +9,8 @@ import io.github.krekerdm.baritonebots.common.geom.Box;
 import io.github.krekerdm.baritonebots.common.json.Json;
 import io.github.krekerdm.baritonebots.common.msg.Reasons;
 import io.github.krekerdm.baritonebots.mod.baritone.SettingsOverride;
+import io.github.krekerdm.baritonebots.mod.behaviour.ProtectionGuard;
+import io.github.krekerdm.baritonebots.mod.behaviour.ProtectionRules;
 import io.github.krekerdm.baritonebots.mod.schematic.PlacedSchematic;
 import io.github.krekerdm.baritonebots.mod.schematic.Placement;
 import io.github.krekerdm.baritonebots.mod.schematic.SchematicArgs;
@@ -94,6 +96,7 @@ public final class BuildTask implements TaskExecutor {
             return;
         }
         applySettings(ctx.args());
+        ProtectionGuard.allowArea(region, ProtectionRules.Mode.AREA); // its own region, even inside a zone (SPEC §5.7g)
         ctx.baritone().getBuilderProcess().build(name, new PlacedSchematic(schematic, placement, region),
                 Positions.toBlockPos(region.min()));
         phase = Phase.BUILDING;

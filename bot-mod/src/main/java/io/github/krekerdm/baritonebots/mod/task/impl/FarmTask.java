@@ -1,9 +1,13 @@
 package io.github.krekerdm.baritonebots.mod.task.impl;
 
+import io.github.krekerdm.baritonebots.common.geom.Box;
+import io.github.krekerdm.baritonebots.common.geom.Pos;
 import io.github.krekerdm.baritonebots.common.json.Json;
 import io.github.krekerdm.baritonebots.common.msg.EventKinds;
 import io.github.krekerdm.baritonebots.common.msg.Levels;
 import io.github.krekerdm.baritonebots.common.msg.Reasons;
+import io.github.krekerdm.baritonebots.mod.behaviour.ProtectionGuard;
+import io.github.krekerdm.baritonebots.mod.behaviour.ProtectionRules;
 import io.github.krekerdm.baritonebots.mod.task.TaskArgs;
 import io.github.krekerdm.baritonebots.mod.task.TaskContext;
 import io.github.krekerdm.baritonebots.mod.task.TaskExecutor;
@@ -30,6 +34,9 @@ public final class FarmTask implements TaskExecutor {
         int range = Math.max(1, Json.getInt(ctx.args(), "range", 20));
         durationSec = Math.max(0, Json.getInt(ctx.args(), "durationSec", 0));
         before = Inv.totals(ctx.player(), false);
+        // Harvest and replant inside the farm range even where it touches a protection zone (SPEC §5.7g).
+        ProtectionGuard.allowArea(new Box(new Pos(center.getX() - range, center.getY() - range, center.getZ() - range),
+                new Pos(center.getX() + range, center.getY() + range, center.getZ() + range)), ProtectionRules.Mode.CROPS);
         ctx.baritone().getFarmProcess().farm(range, center);
         ctx.step("farming around " + center.toShortString(), durationSec > 0 ? 0 : -1);
     }

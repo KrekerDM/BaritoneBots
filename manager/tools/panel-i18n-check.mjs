@@ -49,6 +49,7 @@ const DYNAMIC = {
   evk: [
     "death", "damaged", "threat", "inventory_full", "tool_low", "food_low", "disconnected", "kicked", "joined", "task_failed", "task_done",
     "stuck", "crashed", "link_lost", "project_blocked", "project_done", "order_blocked", "sort_full", "manual", "goal_done", "goal_failed", "plugin_rollback",
+    "protected",
   ],
   "set.kp.armor": ["worn", "none"],
   "set.kp.weapon": ["best", "none"],

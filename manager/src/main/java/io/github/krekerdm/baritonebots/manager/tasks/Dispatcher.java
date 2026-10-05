@@ -42,6 +42,8 @@ public final class Dispatcher {
     public static final String WAIT_HEAVY = "heavy_limit";
     /** A cancel the bot never answers is dropped after this long. */
     private static final long CANCEL_GRACE_MS = 10_000;
+    /** A {@code protected} event this recent makes a stuck task fail with {@code protected} at once (SPEC §5.7g). */
+    static final long PROTECTED_RECENT_MS = 90_000;
 
     // Manager-side steps (catalog "managerSteps").
     public static final String STEP_KIT = "kit";
@@ -681,6 +683,13 @@ public final class Dispatcher {
 
     private void stuckOutcome(BotState b, QueueEntry e, boolean alreadyRetried) {
         int sec = m.config.get().autopilot().forBot(b.def).stuckSec();
+        if (System.currentTimeMillis() - b.protectedAt < PROTECTED_RECENT_MS) {
+            // The bot stood still because the guard refused to break or place: a retry would hit the same wall.
+            m.event("stuck", Levels.WARN, b.id, "event.stuck.protected", Map.of("bot", b.id, "task", e.type(),
+                    "what", String.valueOf(b.protectedText)));
+            outcome(b, e, false, Reasons.PROTECTED, "the way is blocked by a protected zone: " + b.protectedText, null);
+            return;
+        }
         if (alreadyRetried) {
             m.event("stuck", Levels.WARN, b.id, "event.stuck.failed", Map.of("bot", b.id, "task", e.type(), "sec", sec));
             outcome(b, e, false, Reasons.STUCK, "no progress for " + sec + " s (retried once)", null);

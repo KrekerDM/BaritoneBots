@@ -175,11 +175,16 @@ public record BotConfig(String botId, String username, Server server, Login logi
         }
     }
 
-    /** Blocks (globs) the bot must never break, and zones where it must not break or place anything. */
-    public record Protection(boolean enabled, List<String> noBreak, List<Zone> zones) {
+    /**
+     * Blocks (globs) the bot must never break, zones where it must not break or place anything, and {@code built}:
+     * globs of player-built blocks (planks, glass, doors, ...) that are never broken either, except inside the box of
+     * the running area task ({@code selection}, {@code build}, {@code farm}) — which may also work inside zones.
+     */
+    public record Protection(boolean enabled, List<String> noBreak, List<Zone> zones, List<String> built) {
         public Protection {
             noBreak = Copies.list(noBreak);
             zones = Copies.list(zones);
+            built = Copies.list(built);
         }
 
         public static Protection defaults() {
@@ -187,7 +192,7 @@ public record BotConfig(String botId, String username, Server server, Login logi
                     "minecraft:chest", "minecraft:trapped_chest", "minecraft:barrel", "minecraft:ender_chest",
                     "minecraft:*shulker_box", "minecraft:*_bed", "minecraft:spawner",
                     "minecraft:furnace", "minecraft:blast_furnace", "minecraft:smoker",
-                    "minecraft:hopper", "minecraft:dispenser", "minecraft:dropper"), List.of());
+                    "minecraft:hopper", "minecraft:dispenser", "minecraft:dropper"), List.of(), List.of());
         }
     }
 

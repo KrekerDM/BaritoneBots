@@ -2,6 +2,7 @@ package io.github.krekerdm.baritonebots.manager.refs;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonArray;
@@ -268,6 +269,52 @@ class NoCoordinatesFlowTest {
         until(() -> bot.types().contains("goto"), "come");
         assertEquals(100, bot.last("goto").get("x").getAsInt());
         assertEquals(-20, bot.last("goto").get("z").getAsInt());
+    }
+
+    @Test
+    void ownerIsOfferedThenConfirmedAndProtectAddsAZone() throws Exception {
+        m.loop.awaitRun(() -> m.config.patch(Json.obj("general", Json.obj("ownerPlayer", ""))));
+        JsonObject line = Json.obj("pos", Json.obj("x", 100, "y", 70, "z", -20), "dim", "minecraft:overworld",
+                "yaw", 90.0, "pitch", 30.0, "lookBlock", Json.obj("x", 103, "y", 69, "z", -20),
+                "lookBlockId", "minecraft:oak_planks", "player", "Steve", "via", "chat", "candidate", true);
+        JsonObject come = line.deepCopy();
+        come.addProperty("text", "come");
+        bot.event("owner_command", come);
+        until(() -> event("owner_candidate"), "owner candidate");
+        assertEquals("Steve", m.loop.await(() -> m.ownerDetect.view()).getAsJsonObject("candidate").get("player")
+                .getAsString());
+        until(() -> !bot.chat.isEmpty(), "whisper asking to confirm");
+        assertTrue(bot.chat.getFirst().startsWith("/msg Steve Steve, если вы владелец"), bot.chat.getFirst());
+        Thread.sleep(200);
+        assertFalse(bot.types().contains("goto"), "nothing runs before the owner is confirmed");
+
+        JsonObject botLine = line.deepCopy();
+        botLine.addProperty("player", "Bot1");
+        botLine.addProperty("text", "stop");
+        m.loop.awaitRun(() -> m.ownerDetect.dismiss());
+        bot.event("owner_command", botLine);
+        Thread.sleep(200);
+        assertNull(m.loop.await(() -> Json.getObj(m.ownerDetect.view(), "candidate")), "a bot is never the owner");
+
+        m.loop.awaitRun(() -> m.ownerDetect.confirm("Steve"));
+        assertEquals("Steve", m.loop.await(() -> m.config.get().general().ownerOrNull()));
+
+        Thread.sleep(1_100); // reply rate limit
+        JsonObject protect = line.deepCopy();
+        protect.addProperty("text", "защити склад");
+        bot.event("owner_command", protect);
+        until(() -> m.loop.await(() -> !m.worlds.get("main").zones.isEmpty()), "zone from protect");
+        WorldDoc.Zone z = m.loop.await(() -> m.worlds.get("main").zones.getFirst());
+        assertEquals("склад", z.name());
+        assertFalse(z.auto());
+        assertTrue(z.box().contains(new Pos(103, 69, -20)), "around the block the owner looks at");
+        assertEquals(1, m.loop.await(() -> m.zoneBoxes("main", "minecraft:overworld")).size());
+
+        Thread.sleep(1_100);
+        JsonObject unprotect = line.deepCopy();
+        unprotect.addProperty("text", "сними защиту");
+        bot.event("owner_command", unprotect);
+        until(() -> m.loop.await(() -> m.worlds.get("main").zones.isEmpty()), "manual zone removed");
     }
 
     @Test

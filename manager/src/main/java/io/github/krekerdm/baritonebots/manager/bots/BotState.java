@@ -62,6 +62,9 @@ public final class BotState {
     public ScheduledFuture<?> waitTimer;
     /** Between a death and the respawn: nothing is dispatched. */
     public boolean dead;
+    /** Last {@code protected} event of the bot (the guard refused to break / place, SPEC §5.7g) and its text. */
+    public long protectedAt;
+    public String protectedText;
 
     // ---- companion plugin (SPEC §7): last payload per message type, as relayed by the bot
     public final java.util.Map<String, JsonObject> plugin = new java.util.LinkedHashMap<>();

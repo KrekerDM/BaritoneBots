@@ -17,6 +17,7 @@ export const store = {
   settings: null, // {config, schema}; loaded once for thresholds and defaults
   kits: null,
   ai: null, // {enabled, mode, model, timeoutSec, superviseSec} (SPEC §5.7c/d)
+  owner: null, // {player, candidate: {player, serverId, via, time} | absent} (SPEC §5.7e)
   listeners: new Set(),
 };
 
@@ -81,6 +82,7 @@ export function applySnapshot(s) {
   store.servers = listOf(s.servers, "servers");
   store.runtime = s.runtime ?? store.runtime;
   store.ai = s.ai ?? store.ai;
+  store.owner = s.owner ?? store.owner;
   const tail = listOf(s.eventsTail ?? s.events, "events");
   store.events = sortEvents(tail).slice(0, EVENTS_KEPT);
   store.loaded = true;
@@ -207,6 +209,12 @@ export function applyStream(name, data) {
     case "event":
       store.events.unshift(data);
       if (store.events.length > EVENTS_KEPT) store.events.length = EVENTS_KEPT;
+      if (data.kind === "owner_candidate" && data.data) {
+        const c = data.data.dismissed ? null : { player: data.data.player, serverId: data.data.serverId, via: data.data.via };
+        store.owner = { ...(store.owner || {}), candidate: c };
+      } else if (data.kind === "owner_set" && data.data) {
+        store.owner = { player: data.data.player, candidate: null };
+      }
       break;
     default:
       break;
