@@ -6,7 +6,7 @@
 ![Baritone](https://img.shields.io/badge/Baritone-1.19.0-3B82C4)
 ![Fabric](https://img.shields.io/badge/Fabric-0.19.5-DBD0B4)
 ![Java](https://img.shields.io/badge/Java-25-E76F00?logo=openjdk&logoColor=white)
-![Tests](https://img.shields.io/badge/%D0%A2%D0%B5%D1%81%D1%82%D0%BE%D0%B2-211-2EA043)
+![Tests](https://img.shields.io/badge/%D0%A2%D0%B5%D1%81%D1%82%D0%BE%D0%B2-269-2EA043)
 ![Status](https://img.shields.io/badge/%D0%A1%D1%82%D0%B0%D1%82%D1%83%D1%81-beta-D9A400)
 ![License](https://img.shields.io/badge/License-MIT-555555)
 
@@ -56,7 +56,7 @@ Baritone. Управление идёт из веб-панели на том П�
 
 ## Предупреждение
 
-Это бета. Мод, менеджер и плагин собраны и покрыты 211 тестами, но часть
+Это бета. Мод, менеджер и плагин собраны и покрыты 269 тестами, но часть
 функций ещё не прошла проверку в живой игре, а в панели нет экранов для
 проектов, расписаний и правил: они пока настраиваются через API. Таблица
 ниже показывает, что проверено на настоящем сервере.
@@ -103,7 +103,7 @@ normal 1024 MB или performance 2048 MB.
 2. Скачайте `baritonebots-manager-*.jar` из [Releases](https://github.com/KrekerDM/BaritoneBots/releases) в пустую папку.
 3. Запустите:
    ```bash
-   java -jar baritonebots-manager-0.2.0-beta.1.jar
+   java -jar baritonebots-manager-0.3.0-beta.1.jar
    ```
    Панель откроется в браузере, адрес с токеном менеджер печатает в консоль.
 4. «Настройки» → «Серверы»: адрес сервера. Если там скрыта руда, включите

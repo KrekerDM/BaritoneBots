@@ -6,7 +6,7 @@
 ![Baritone](https://img.shields.io/badge/Baritone-1.19.0-3B82C4)
 ![Fabric](https://img.shields.io/badge/Fabric-0.19.5-DBD0B4)
 ![Java](https://img.shields.io/badge/Java-25-E76F00?logo=openjdk&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-211-2EA043)
+![Tests](https://img.shields.io/badge/Tests-269-2EA043)
 ![Status](https://img.shields.io/badge/Status-beta-D9A400)
 ![License](https://img.shields.io/badge/License-MIT-555555)
 
@@ -57,7 +57,7 @@ storage", "progress to iron" — and the manager splits the work between bots.
 
 ## Warning
 
-This is a beta. Mod, manager and plugin build and pass 211 tests, but some
+This is a beta. Mod, manager and plugin build and pass 269 tests, but some
 features have not been tried in a live game yet, and the panel has no screens
 for projects, schedules and rules yet — use the API for those. The table below
 lists what was checked on a real server.
@@ -104,7 +104,7 @@ normal 1024 MB or performance 2048 MB.
 2. Download `baritonebots-manager-*.jar` from [Releases](https://github.com/KrekerDM/BaritoneBots/releases) into an empty folder.
 3. Run:
    ```bash
-   java -jar baritonebots-manager-0.2.0-beta.1.jar
+   java -jar baritonebots-manager-0.3.0-beta.1.jar
    ```
    The panel opens in the browser; the manager prints the address with the token.
 4. Settings → Servers: server address. Turn on anti-xray in the profile if the
