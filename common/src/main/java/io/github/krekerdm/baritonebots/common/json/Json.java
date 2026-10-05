@@ -9,6 +9,11 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.TypeAdapter;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
+import java.io.IOException;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -22,7 +27,54 @@ import java.util.Map;
  */
 public final class Json {
     /** Shared, thread-safe Gson. */
-    public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
+    /**
+     * NaN and ±Infinity become JSON null instead of throwing. Found live: Baritone's ETA can be Infinity, and one
+     * such value made every status message of a bot fail, so the manager stopped seeing that bot.
+     */
+    private static final TypeAdapter<Double> FINITE_DOUBLE = new TypeAdapter<>() {
+        @Override
+        public void write(JsonWriter out, Double v) throws IOException {
+            if (v == null || v.isNaN() || v.isInfinite()) {
+                out.nullValue();
+            } else {
+                out.value(v);
+            }
+        }
+
+        @Override
+        public Double read(JsonReader in) throws IOException {
+            if (in.peek() == JsonToken.NULL) {
+                in.nextNull();
+                return null; // Gson leaves primitive fields at their default for null
+            }
+            return in.nextDouble();
+        }
+    };
+
+    private static final TypeAdapter<Float> FINITE_FLOAT = new TypeAdapter<>() {
+        @Override
+        public void write(JsonWriter out, Float v) throws IOException {
+            if (v == null || v.isNaN() || v.isInfinite()) {
+                out.nullValue();
+            } else {
+                out.value(v);
+            }
+        }
+
+        @Override
+        public Float read(JsonReader in) throws IOException {
+            if (in.peek() == JsonToken.NULL) {
+                in.nextNull();
+                return null;
+            }
+            return (float) in.nextDouble();
+        }
+    };
+
+    public static final Gson GSON = new GsonBuilder().disableHtmlEscaping()
+            .registerTypeAdapter(Double.class, FINITE_DOUBLE).registerTypeAdapter(double.class, FINITE_DOUBLE)
+            .registerTypeAdapter(Float.class, FINITE_FLOAT).registerTypeAdapter(float.class, FINITE_FLOAT)
+            .create();
 
     private Json() {
     }

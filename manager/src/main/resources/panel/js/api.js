@@ -151,6 +151,13 @@ export function connectStream({ onMessage, onState, onOpen, onAuthFailed }) {
       onState({ state: "no_token", attempt });
       return;
     }
+    // ?static: one snapshot, no live stream. Headless screenshots need it, because an open
+    // EventSource keeps the network busy and the browser's virtual clock never advances.
+    if (new URLSearchParams(location.search).has("static")) {
+      onState({ state: "open", attempt, since: Date.now() });
+      onOpen && onOpen();
+      return;
+    }
     onState({ state: "connecting", attempt });
     source = new EventSource(`/api/stream?token=${encodeURIComponent(token)}`);
     source.onopen = () => {
