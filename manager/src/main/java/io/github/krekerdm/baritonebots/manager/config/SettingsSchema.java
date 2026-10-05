@@ -26,9 +26,11 @@ public final class SettingsSchema {
     public static final List<String> ROLES = List.of("builder", "miner", "lumberjack", "farmer", "smelter",
             "crafter", "sorter", "rancher", "hauler", "guard");
     public static final List<String> SECTIONS = List.of("general", "runtime", "servers", "bots", "behaviour",
-            "baritone", "client", "status", "planner", "autopilot", "keepProfiles", "orders", "schedules", "rules");
+            "baritone", "client", "status", "planner", "autopilot", "keepProfiles", "orders", "schedules", "rules", "ai");
     /** {@code priority} of schedules and rules: normal = queued behind planner work, high = replaces it (§5.7b). */
     public static final List<String> STEP_PRIORITIES = List.of("normal", "high");
+    /** {@code ai.mode}: supervisor actions wait for a click, or apply at once (SPEC §5.7d). */
+    public static final List<String> AI_MODES = List.of("suggest", "auto");
     /** Container roles a standing order may deliver into (besides {@code sorted:<category>} and container ids). */
     public static final List<String> ORDER_ROLES = List.of("storage", "supply", "kit", "fuel", "inbox");
     /** Xmx per bot for {@code runtime.memoryPreset}; {@code custom} uses {@code runtime.memoryMb}. */
@@ -155,6 +157,7 @@ public final class SettingsSchema {
         orders(l);
         schedules(l);
         rules(l);
+        ai(l);
         return List.copyOf(l);
     }
 
@@ -423,6 +426,16 @@ public final class SettingsSchema {
         l.add(f("rules[].botIds", JSON, "any"));
         l.add(num("rules[].cooldownSec", INT, 300, 0, 86400, "s"));
         l.add(choice("rules[].priority", ENUM, "normal", STEP_PRIORITIES));
+    }
+
+    /** Optional local AI through Ollama (SPEC §5.7c command box, §5.7d supervisor); off by default. */
+    private static void ai(List<SchemaField> l) {
+        l.add(f("ai.enabled", BOOL, false));
+        l.add(f("ai.endpoint", STRING, "http://127.0.0.1:11434"));
+        l.add(f("ai.model", STRING, "qwen2.5:7b-instruct"));
+        l.add(num("ai.timeoutSec", INT, 30, 1, 600, "s"));
+        l.add(num("ai.superviseSec", INT, 90, 15, 3600, "s"));
+        l.add(choice("ai.mode", ENUM, "suggest", AI_MODES));
     }
 
     /** Sorting categories (SPEC §5.7a); the first category whose globs or {@code #tags} match an item wins. */

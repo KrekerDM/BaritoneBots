@@ -7,13 +7,14 @@ import { store, botList, loadCatalog, serverName } from "../store.js";
 import { processEl, botStateEl, num } from "../format.js";
 import { taskForm } from "../forms.js";
 import * as bv from "../botview.js";
+import { commandBox } from "../ai.js";
 
 const RUNNING = new Set(["installing", "starting", "linked", "online", "stopping"]);
 const STATUS_COLS = 10;
 
 export function render(root, params, app) {
   const selected = new Set();
-  const rows = new Map(); // id -> {tr, check, zone: [td], actions: {start, stop, restart}, mode}
+  const rows = new Map(); // id -> {tr, check, zone: [td], actions: {toggle, restart}}
 
   const summary = h("p", { class: "small" });
   const tbody = h("tbody");
@@ -64,7 +65,7 @@ export function render(root, params, app) {
   const tableEl = h(
     "div",
     { class: "table-wrap" },
-    h("table", { class: "table" }, h("caption", { class: "sr-only" }, t("bots.title")), h("thead", null, h("tr", null, headers)), tbody),
+    h("table", { class: "table bots-table" }, h("caption", { class: "sr-only" }, t("bots.title")), h("thead", null, h("tr", null, headers)), tbody),
   );
   const listHost = h("div");
 
@@ -109,14 +110,15 @@ export function render(root, params, app) {
       else selected.delete(bot.id);
       updateSelection();
     });
+    // Two small buttons keep the column narrow: start or stop (whichever applies) and restart;
+    // kill / connect / disconnect stay on the bot page.
     const actions = {
-      start: btn(t("bots.start"), action(bot.id, "start")),
-      stop: btn(t("bots.stop"), action(bot.id, "stop")),
-      restart: btn(t("bots.restart"), action(bot.id, "restart")),
+      toggle: btn(t("bots.start"), (e) => action(bot.id, RUNNING.has(store.bots.get(bot.id)?.process) ? "stop" : "start")(e)),
+      restart: btn(t("bots.restartShort"), action(bot.id, "restart"), { title: t("bots.restart") }),
     };
     const nameCell = h("td");
     const procCell = h("td");
-    const actCell = h("td", { class: "actions" }, h("div", { class: "row-sm" }, actions.start, actions.stop, actions.restart));
+    const actCell = h("td", { class: "actions" }, h("div", { class: "row-sm row-nowrap" }, actions.toggle, actions.restart));
     const tr = h("tr", null, h("td", null, check), nameCell, procCell, actCell);
     const r = { tr, check, nameCell, procCell, actCell, actions, zone: [], hasStatus: null };
     rows.set(bot.id, r);
@@ -134,8 +136,8 @@ export function render(root, params, app) {
     r.zone = zoneCells(bot);
     for (const td of r.zone) r.tr.insertBefore(td, r.actCell);
     const running = RUNNING.has(bot.process);
-    r.actions.start.disabled = running;
-    r.actions.stop.disabled = !running;
+    r.actions.toggle.textContent = running ? t("bots.stop") : t("bots.start");
+    r.actions.toggle.disabled = bot.process === "installing" || bot.process === "stopping";
     r.actions.restart.disabled = bot.process === "installing";
   }
 
@@ -187,6 +189,7 @@ export function render(root, params, app) {
   }
 
   const refresh = throttle(renderList, 500);
+  const ai = commandBox({ botIds: () => [...selected], hint: t("ai.hintSelected") });
 
   async function mountForm() {
     try {
@@ -232,6 +235,7 @@ export function render(root, params, app) {
         summary,
         listHost,
       ),
+      ai.el,
       h(
         "section",
         { class: "section" },
@@ -246,6 +250,7 @@ export function render(root, params, app) {
 
   return {
     update(type) {
+      ai.update(type);
       if (type === "bot" || type === "process" || type === "queue" || type === "snapshot") refresh();
     },
   };

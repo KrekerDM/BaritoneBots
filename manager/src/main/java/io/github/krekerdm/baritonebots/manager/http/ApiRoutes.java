@@ -84,6 +84,7 @@ final class ApiRoutes {
         world(r);
         schematicRoutes(r);
         projects(r);
+        ai(r);
 
         r.get("/api/runtime", q -> {
             JsonObject view = loop(m.installer::view);
@@ -646,6 +647,62 @@ final class ApiRoutes {
             }
             return data.describe(q.param("id"));
         });
+    }
+
+    // ------------------------------------------------------------------ optional local AI (SPEC §5.7c, §5.7d)
+
+    /** A model round started on the loop and how long the HTTP thread may wait for it. */
+    private record Pending(CompletableFuture<JsonObject> future, long waitMs) {
+    }
+
+    private void ai(Router r) {
+        r.get("/api/ai/status", q -> awaitAi(loop(() -> new Pending(m.ai.status(), 8_000))));
+        r.post("/api/ai/plan", q -> {
+            JsonObject body = q.json();
+            return awaitAi(loop(() -> new Pending(m.ai.plan(body), m.ai.waitMs())));
+        });
+        r.post("/api/ai/run", q -> {
+            JsonObject body = q.json();
+            return awaitAi(loop(() -> new Pending(m.ai.run(body),
+                    io.github.krekerdm.baritonebots.manager.refs.RefResolver.HTTP_WAIT_MS + 5_000)));
+        });
+        r.get("/api/ai/feed", q -> {
+            String project = q.query("project", null);
+            if (project == null || project.isBlank()) {
+                throw ApiException.badRequest("bad_request", "missing ?project=");
+            }
+            return loop(() -> m.ai.feed(project));
+        });
+        r.post("/api/ai/supervise", q -> {
+            String project = Json.getString(q.json(), "project", q.query("project", null));
+            if (project == null || project.isBlank()) {
+                throw ApiException.badRequest("bad_request", "missing project");
+            }
+            return awaitAi(loop(() -> new Pending(m.ai.superviseNow(project), m.ai.waitMs())));
+        });
+        r.post("/api/ai/suggestions/{id}/apply", q -> loop(() -> m.ai.decide(q.param("id"), true)));
+        r.post("/api/ai/suggestions/{id}/dismiss", q -> loop(() -> m.ai.decide(q.param("id"), false)));
+    }
+
+    private static JsonObject awaitAi(Pending p) {
+        try {
+            return p.future().get(p.waitMs(), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            throw new ApiException(504, io.github.krekerdm.baritonebots.manager.ai.AiException.TIMEOUT,
+                    "no answer within " + p.waitMs() / 1000 + " s");
+        } catch (ExecutionException e) {
+            Throwable c = e.getCause();
+            if (c instanceof io.github.krekerdm.baritonebots.manager.ai.AiException ae) {
+                throw ae.toApi();
+            }
+            if (c instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new IllegalStateException(c);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ApiException(503, "busy", "interrupted");
+        }
     }
 
     /**

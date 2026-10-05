@@ -59,6 +59,18 @@ const DYNAMIC = {
   error: ["network", "panel_error"],
   wfield: ["name", "dim", "pos", "box", "label", "roles"],
   "bots.noStatus": ["stopped", "installing", "starting", "linked", "stopping", "crashed"],
+  // Optional local AI (js/ai.js); aiAct.* and aiBy.* live in the manager catalog.
+  "ai.status": ["pending", "applied", "dismissed", "rejected", "failed", "expired"],
+  "ai.trigger": ["timer", "blocked", "stuck", "death", "manual"],
+  "ai.mode": ["suggest", "auto"],
+  "ai.reason": [
+    "unknown_type", "not_allowed_type", "unknown_arg", "bad_arg", "missing_arg", "unknown_bot", "bot_not_allowed", "bad_ref",
+    "unknown_waypoint", "unknown_area", "unknown_kit", "unknown_profile", "unknown_schematic", "invented_coordinates", "bad_item",
+    "too_many", "bad_step", "bad_order", "bad_project", "unknown_kind", "unknown_role", "role_not_allowed", "unknown_action",
+    "bad_priority", "no_free_bot", "error",
+  ],
+  aiAct: ["set_priority", "reassign", "add_standing_order", "pause_project", "resume_project", "add_task", "notify"],
+  aiBy: ["auto", "owner"],
 };
 
 // String literals that look like keys but are not: storage keys, tid() prefixes, field paths.

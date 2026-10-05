@@ -142,6 +142,9 @@ Requires Java 25. Jars land in `manager/build/libs`, `bot-mod/build/libs` and
   it follows the name, so give bots long passwords. With the companion plugin you
   can grant `grim.exempt` only to bots that passed the token check.
 - **Companion plugin.** Install and settings: [docs/PLUGIN.md](docs/PLUGIN.md).
+- **Optional local AI.** A command box ("progress to iron") and a project
+  dispatcher through Ollama on the same computer; off by default. Setup and
+  limits: [docs/AI.md](docs/AI.md).
 
 ## How it works
 
@@ -166,7 +169,8 @@ decisions taken during development: [docs/dev/DECISIONS.md](docs/dev/DECISIONS.m
 - Honest resources only: whatever a bot cannot mine, craft or smelt ends up on a
   "please supply" list.
 - Mining under anti-xray is slower: the bot branch-mines instead of heading to the ore.
-- The AI dispatcher through a local Ollama is still in progress.
+- The AI works only through a local Ollama: a 7B model needs about 5 GB of
+  memory and answers in seconds. There are no cloud models.
 
 ## Licence
 

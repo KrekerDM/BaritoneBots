@@ -5,7 +5,7 @@ const DEFAULT_TIMEOUT_MS = 20000;
 const UPLOAD_TIMEOUT_MS = 180000;
 const BACKOFF_MS = [1000, 2000, 4000, 8000, 15000, 30000];
 
-export const STREAM_EVENTS = ["bot", "queue", "process", "event", "project", "runtime", "log", "world"];
+export const STREAM_EVENTS = ["bot", "queue", "process", "event", "project", "runtime", "log", "world", "ai"];
 
 let memoryToken = null;
 

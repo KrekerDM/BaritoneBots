@@ -10,6 +10,7 @@ import { taskForm, templateTitle } from "../forms.js";
 import { ownerName } from "../refpick.js";
 import * as bv from "../botview.js";
 import { eventText } from "./events.js";
+import { commandBox } from "../ai.js";
 
 const LOG_LINES = 200;
 const LOG_KEEP = 600;
@@ -238,17 +239,7 @@ export function render(root, params) {
         ...procPairs,
         [t("bot.f.state"), h("span", null, botStateEl(s.state), s.server ? h("span", { class: "mono dim" }, ` ${s.server}`) : null)],
         [t("bot.f.task"), bv.taskEl(b)],
-        [
-          t("bot.f.baritone"),
-          h(
-            "span",
-            null,
-            baritone.process ? h("span", { class: "mono" }, baritone.process) : h("span", { class: "dim" }, t("bot.baritoneIdle")),
-            baritone.pathing ? ` · ${t("bot.pathing")}` : "",
-            baritone.goal ? h("span", { class: "dim" }, ` · ${baritone.goal}`) : null,
-            isNum(baritone.eta) ? [" · ETA ", durationEl(baritone.eta)] : null,
-          ),
-        ],
+        [t("bot.f.baritone"), bv.baritoneEl(baritone)],
         [t("bot.f.hp"), bv.hpEl(b)],
         [t("bot.f.food"), h("span", null, bv.foodEl(b), isNum(s.saturation) ? h("span", { class: "num-threshold" }, t("bot.saturation", { v: s.saturation.toFixed(1) })) : null)],
         [
@@ -731,6 +722,7 @@ export function render(root, params) {
   // Layout
   // ----------------------------------------------------------------
   const sec = (key, ...children) => h("section", { class: "section" }, h("div", { class: "head" }, h("h2", { class: "h2" }, t(key))), children);
+  const ai = commandBox({ botIds: () => [id], hint: t("ai.hintBot") });
 
   mount(
     root,
@@ -739,6 +731,7 @@ export function render(root, params) {
       { class: "stack-lg" },
       h("div", { class: "stack-sm" }, h("p", null, h("a", { href: "#/bots" }, t("bot.back"))), title, subtitle, actions),
       sec("quick.title", quickEl),
+      ai.el,
       h(
         "div",
         { class: "cols" },
@@ -783,6 +776,7 @@ export function render(root, params) {
       clearTimeout(msTimer);
     },
     update(type, data) {
+      ai.update(type);
       const forMe = data && (data.botId === id || data.id === id || data.status?.botId === id);
       if (type === "snapshot") {
         if (!bot()) {

@@ -16,6 +16,7 @@ export const store = {
   catalog: null,
   settings: null, // {config, schema}; loaded once for thresholds and defaults
   kits: null,
+  ai: null, // {enabled, mode, model, timeoutSec, superviseSec} (SPEC §5.7c/d)
   listeners: new Set(),
 };
 
@@ -79,6 +80,7 @@ export function applySnapshot(s) {
   store.projects = new Map(listOf(s.projects, "projects").map((p) => [p.id, p]));
   store.servers = listOf(s.servers, "servers");
   store.runtime = s.runtime ?? store.runtime;
+  store.ai = s.ai ?? store.ai;
   const tail = listOf(s.eventsTail ?? s.events, "events");
   store.events = sortEvents(tail).slice(0, EVENTS_KEPT);
   store.loaded = true;
@@ -197,6 +199,10 @@ export function applyStream(name, data) {
     case "world":
       // Only the server id arrives; the next loadWorld() fetches the new document.
       if (data.serverId) store.worlds.delete(data.serverId);
+      break;
+    case "ai":
+      // {type:"status", enabled, mode, ...} after a settings change; feed entries go to the screens as they are.
+      if (data.type === "status") store.ai = { ...(store.ai || {}), ...data };
       break;
     case "event":
       store.events.unshift(data);

@@ -432,7 +432,7 @@ public final class OwnerCommands {
     }
 
     /** Exact name, name without extension, or a unique prefix (case-insensitive). */
-    static String matchSchematic(String wanted, List<String> files) {
+    public static String matchSchematic(String wanted, List<String> files) {
         String w = wanted.toLowerCase(Locale.ROOT);
         List<String> prefix = new ArrayList<>();
         for (String f : files) {

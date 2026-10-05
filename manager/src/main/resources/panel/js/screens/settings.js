@@ -7,6 +7,7 @@ import { h, mount, btn, busy, toast, confirmDialog, errorBox, empty, table, fiel
 import { t, tid } from "../i18n.js";
 import { store, loadSettings } from "../store.js";
 import { num, noData, pct, bytes, timeEl, processEl } from "../format.js";
+import { connectionBox } from "../ai.js";
 
 const ITEM_LISTS = new Set(["servers", "bots"]);
 
@@ -118,7 +119,8 @@ function hintFor(f) {
   if (f.unit) parts.push(t("form.unit", { unit: t(`unit.${f.unit}`, null, f.unit) }));
   if (f.min !== undefined || f.max !== undefined) parts.push(t("form.range", { min: f.min ?? "", max: f.max ?? "" }));
   if (f.default !== undefined && f.default !== null && f.default !== "" && !isObj(f.default) && !Array.isArray(f.default) && f.type !== "secret") {
-    parts.push(t("form.default", { value: f.type === "bool" ? t(f.default ? "set.on" : "set.off") : f.default }));
+    const value = f.type === "bool" ? t(f.default ? "set.on" : "set.off") : f.type === "enum" ? optionLabel(f, f.default) : f.default;
+    parts.push(t("form.default", { value }));
   }
   if (f.nullable) parts.push(t("set.nullable"));
   if (f.applies && f.applies !== "live") parts.push(t(`set.applies.${f.applies}`, null, f.applies));
@@ -417,6 +419,7 @@ function sectionView(host, sectionId, { filter, titleKey, primary = true } = {})
       automationTab ? h("p", { class: "small" }, t("set.automationNote"), " ", h("a", { href: `#/automation/${automationTab}` }, t(`auto.tab.${automationTab}`))) : null,
       form,
     ),
+    sectionId === "ai" && !filter ? connectionBox() : null,
   );
   return rt ? { update: rt.update } : null;
 }

@@ -280,6 +280,24 @@ public final class ConfigValidator {
             }
         }
         automation(root, serverIds, botIds, errors);
+        if (!validEndpoint(Json.getString(Json.getObj(root, "ai"), "endpoint", ""))) {
+            errors.putIfAbsent("ai.endpoint", "pattern");
+        }
+    }
+
+    /** {@code ai.endpoint}: an http(s) URL with a host and no query or fragment (SPEC §5.7c). */
+    public static boolean validEndpoint(String endpoint) {
+        if (endpoint == null || endpoint.isBlank()) {
+            return false;
+        }
+        try {
+            java.net.URI u = new java.net.URI(endpoint.trim());
+            String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(Locale.ROOT);
+            return (scheme.equals("http") || scheme.equals("https")) && u.getHost() != null && u.getQuery() == null
+                    && u.getFragment() == null;
+        } catch (java.net.URISyntaxException e) {
+            return false;
+        }
     }
 
     /** Container roles a sign word may stand for (besides {@code sorted:<category>}). */

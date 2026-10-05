@@ -15,9 +15,10 @@ import java.util.Optional;
 public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProfile> servers, List<BotDef> bots,
                             JsonObject behaviour, JsonObject baritone, JsonObject client, JsonObject status,
                             PlannerCfg planner, AutopilotCfg autopilot, List<OrderDef> orders,
-                            List<ScheduleDef> schedules, List<RuleDef> rules, JsonObject keepProfiles) {
+                            List<ScheduleDef> schedules, List<RuleDef> rules, JsonObject keepProfiles, AiCfg ai) {
 
     public ManagerConfig {
+        ai = ai == null ? AiCfg.defaults() : ai;
         servers = servers == null ? List.of() : List.copyOf(servers);
         bots = bots == null ? List.of() : List.copyOf(bots);
         autopilot = autopilot == null ? AutopilotCfg.defaults() : autopilot;
@@ -192,6 +193,29 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
     public record Account(String type) {
         public static final String OFFLINE = "offline";
         public static final String MICROSOFT = "microsoft";
+    }
+
+    /**
+     * Optional local AI (SPEC §5.7c / §5.7d): Ollama endpoint and model, request timeout, supervisor interval and
+     * whether supervisor actions wait for a click ({@code suggest}) or apply at once ({@code auto}).
+     */
+    public record AiCfg(boolean enabled, String endpoint, String model, int timeoutSec, int superviseSec, String mode) {
+        public static final String SUGGEST = "suggest";
+        public static final String AUTO = "auto";
+
+        public static AiCfg defaults() {
+            return new AiCfg(false, "http://127.0.0.1:11434", "qwen2.5:7b-instruct", 30, 90, SUGGEST);
+        }
+
+        public boolean auto() {
+            return AUTO.equals(mode);
+        }
+
+        /** The endpoint without a trailing slash. */
+        public String base() {
+            String e = endpoint == null || endpoint.isBlank() ? defaults().endpoint() : endpoint.trim();
+            return e.endsWith("/") ? e.substring(0, e.length() - 1) : e;
+        }
     }
 
     public record PlannerCfg(int tickSec, int roleSwitchCooldownSec, int maxBuildersPerSector,

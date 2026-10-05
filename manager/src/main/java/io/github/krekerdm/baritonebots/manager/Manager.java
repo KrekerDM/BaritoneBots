@@ -87,6 +87,8 @@ public final class Manager implements LinkServer.Handler {
     public final io.github.krekerdm.baritonebots.manager.refs.RefResolver refs;
     /** In-game owner commands (SPEC §5.7e). */
     public final io.github.krekerdm.baritonebots.manager.refs.OwnerCommands owner;
+    /** Optional local AI: command box and project supervisor (SPEC §5.7c, §5.7d). */
+    public final io.github.krekerdm.baritonebots.manager.ai.AiService ai;
     public final LinkServer link;
     public final HttpApi http;
     private Tray tray;
@@ -126,6 +128,7 @@ public final class Manager implements LinkServer.Handler {
         msLogin = new io.github.krekerdm.baritonebots.manager.process.MicrosoftLogin(this);
         refs = new io.github.krekerdm.baritonebots.manager.refs.RefResolver(this);
         owner = new io.github.krekerdm.baritonebots.manager.refs.OwnerCommands(this);
+        ai = new io.github.krekerdm.baritonebots.manager.ai.AiService(this);
         link = new LinkServer(loop, this);
         http = new HttpApi(this);
     }
@@ -141,6 +144,7 @@ public final class Manager implements LinkServer.Handler {
             events.open();
             events.addListener(e -> sse.broadcast(SseHub.EVENT, e));
             events.addListener(automation::onEvent);
+            events.addListener(ai::onEvent);
             kits.load();
             scenarios.load();
             for (ManagerConfig.BotDef def : config.get().bots()) {
@@ -167,6 +171,7 @@ public final class Manager implements LinkServer.Handler {
             planner.start();
             projects.resumeRunning();
             automation.start();
+            ai.start();
         });
     }
 
@@ -230,6 +235,7 @@ public final class Manager implements LinkServer.Handler {
             loop.awaitRun(() -> {
                 planner.stop();
                 automation.stop();
+                ai.stop();
                 msLogin.shutdown();
                 dispatcher.saveQueues();
                 projects.flush();
@@ -349,7 +355,7 @@ public final class Manager implements LinkServer.Handler {
         JsonArray servers = Json.getArr(config.viewForPanel(), "servers");
         return Json.obj("version", version, "bots", botsArr, "projects", Json.arrOf(projects.list()),
                 "servers", servers == null ? new JsonArray() : servers, "runtime", installer.view(),
-                "gameData", gameData.view(),
+                "gameData", gameData.view(), "ai", ai.brief(),
                 "eventsTail", Json.arrOf(events.query(200, null, null)),
                 "language", config.get().general().language(), "time", System.currentTimeMillis());
     }
@@ -380,6 +386,7 @@ public final class Manager implements LinkServer.Handler {
         gameData.invalidate(nu);
         planner.retime();
         autopilot.sync(nu);
+        ai.onConfigChanged(old, nu);
     }
 
     // ------------------------------------------------------------------ link callbacks (loop)

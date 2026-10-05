@@ -7,6 +7,7 @@ import { t, tid } from "../i18n.js";
 import { store, serverName } from "../store.js";
 import { num, noData, isNum, durationEl, posText, dimLabel, shortId, timeEl, levelEl, argsSummary, boxText, refText } from "../format.js";
 import { statusEl } from "./projects.js";
+import { dispatcherSection } from "../ai.js";
 
 /**
  * Normalised progress numbers of any project kind (SPEC §5.7: done/total
@@ -198,6 +199,7 @@ export function render(root, params, app) {
   let eventsError = null;
 
   const p = () => store.projects.get(id);
+  const ai = dispatcherSection(id, p);
 
   function control(verb, { confirm, primary } = {}) {
     return btn(
@@ -473,7 +475,8 @@ export function render(root, params, app) {
       mount(host, store.loaded ? h("div", { class: "stack" }, errorBox({ code: "not_found", message: id }), h("a", { href: "#/projects" }, t("proj.back"))) : empty(t("ui.loading")));
       return;
     }
-    if (!host.contains(headHost)) mount(host, headHost, dataHost);
+    // The dispatcher sits outside dataHost: the once-per-second redraw must not move its buttons.
+    if (!host.contains(headHost)) mount(host, headHost, ai.el, dataHost);
     // The control row is rebuilt only when the status changes, so a
     // focused button survives the once-per-second progress updates.
     const key = `${pr.status}|${pr.name}`;
@@ -523,6 +526,7 @@ export function render(root, params, app) {
   const refetch = throttle(fetchFull, 5000);
   return {
     update(type, data) {
+      ai.update(type, data);
       if (type === "snapshot") refetch();
       else if (type === "project" && (data?.id === id || data?.project?.id === id)) {
         redraw();

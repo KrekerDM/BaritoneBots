@@ -701,6 +701,33 @@ progress::-moz-progress-bar {
   white-space: nowrap;
 }
 
+/* Bots table: thresholds under their number, headers on two lines and two
+   small action buttons keep the 14 columns inside a 1440 px window; a
+   narrower window scrolls the table inside .table-wrap. */
+.bots-table th {
+  white-space: normal;
+  overflow-wrap: normal;
+}
+
+.bots-table .num-threshold {
+  display: block;
+  margin-left: 0;
+  white-space: normal;
+}
+
+.row-nowrap {
+  flex-wrap: nowrap;
+}
+
+/* AI command box (SPEC §5.7c) and plan / dispatcher lists */
+.ai-input {
+  width: 100%;
+}
+
+.ai-items > li {
+  padding: var(--s-2) 0;
+}
+
 .spec {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);

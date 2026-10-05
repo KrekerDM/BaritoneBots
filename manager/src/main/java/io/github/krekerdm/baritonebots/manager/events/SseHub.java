@@ -28,6 +28,8 @@ public final class SseHub {
     public static final String LOG = "log";
     /** Not in SPEC §6; world knowledge changed (container snapshot, discover). Unknown names are ignored by browsers. */
     public static final String WORLD = "world";
+    /** AI supervisor feed entries and AI on/off (SPEC §5.7d). */
+    public static final String AI = "ai";
 
     private static final long HEARTBEAT_MS = 15_000;
     private static final int QUEUE_CAPACITY = 2000;

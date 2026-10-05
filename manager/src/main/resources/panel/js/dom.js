@@ -104,7 +104,7 @@ export function errorText(e) {
 
 export function errorBox(e, prefixKey) {
   const code = (e && e.code) || "error";
-  const known = t(`error.${code}`, null, "");
+  const known = t(`error.${code}`, null, "").replace(/[.\s]+$/, "");
   return h(
     "div",
     { class: "error-box", role: "alert" },

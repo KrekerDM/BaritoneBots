@@ -80,6 +80,18 @@ public final class TaskCatalog {
         return t != null && Json.getBool(t, "continuous", false);
     }
 
+    /** Copy of the catalog entry of a task type or manager step, or null. */
+    public JsonObject definition(String type) {
+        JsonObject d = tasks.containsKey(type) ? tasks.get(type) : steps.get(type);
+        return d == null ? null : d.deepCopy();
+    }
+
+    /** True for steps only the manager queues itself ({@code "internal": true}: supply, resolve). */
+    public boolean isInternal(String type) {
+        JsonObject d = steps.get(type);
+        return d != null && Json.getBool(d, "internal", false);
+    }
+
     /** Arguments of a task / manager step that accept position references ({@code "refs": true}): name → type. */
     public Map<String, String> refArgs(String type) {
         JsonObject def = tasks.containsKey(type) ? tasks.get(type) : steps.get(type);
