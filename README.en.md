@@ -110,7 +110,7 @@ normal 1024 MB or performance 2048 MB.
 2. Download `baritonebots-manager-*.jar` from [Releases](https://github.com/KrekerDM/BaritoneBots/releases) into an empty folder.
 3. Run:
    ```bash
-   java -jar baritonebots-manager-0.3.0-beta.2.jar
+   java -jar baritonebots-manager-0.3.0-beta.3.jar
    ```
    The panel opens in the browser; the manager prints the address with the token.
 4. On the Bots page enter the server address and press "Add bots and start".

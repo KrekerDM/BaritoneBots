@@ -5,9 +5,9 @@
 Два необязательных помощника поверх планировщика, оба выключены по умолчанию.
 Поле команд превращает фразу вроде «развиться до железки» в план для ботов.
 Диспетчер раз в 90 с читает сводку запущенного проекта и пишет, что происходит
-и что стоит поменять. Модель работает в Ollama на этом же компьютере, адрес
-по умолчанию `http://127.0.0.1:11434`. Менеджер не обращается к облачным
-моделям и не хранит ключей.
+и что стоит поменять. Модель работает в Ollama или LM Studio на этом же
+компьютере, адрес по умолчанию `http://127.0.0.1:11434`. Менеджер не обращается
+к облачным моделям. Ключ API нужен только удалённому серверу с проверкой ключа.
 
 Раздачу работы ботам ИИ не берёт на себя: каждые 5 с её по-прежнему делает
 планировщик. Без Ollama панель и боты работают так же, как с выключенным ИИ.
@@ -27,14 +27,32 @@
 | Настройка | По умолчанию | Что делает |
 |---|---|---|
 | `ai.enabled` | выкл. | показывает поле команд и диспетчер |
-| `ai.endpoint` | `http://127.0.0.1:11434` | адрес Ollama |
-| `ai.model` | `qwen2.5:7b-instruct` | имя модели в Ollama |
+| `ai.provider` | «Определять сам» | Ollama, LM Studio или другой OpenAI-совместимый сервер |
+| `ai.endpoint` | `http://127.0.0.1:11434` | адрес сервера модели, `/v1` в конце можно оставить |
+| `ai.model` | `qwen2.5:7b-instruct` | имя модели в Ollama или её id в LM Studio |
+| `ai.apiKey` | пусто | ключ для удалённого сервера, в журнал не пишется |
 | `ai.timeoutSec` | 30 с | сколько ждать ответа на один запрос |
 | `ai.superviseSec` | 90 с | как часто диспетчер разбирает каждый запущенный проект |
 | `ai.mode` | «Предлагать» | действия диспетчера ждут вашего решения или применяются сразу |
 
 Первый запрос после запуска Ollama дольше обычного: модель загружается в память.
 Если он не укладывается в 30 с, увеличьте «Ожидание ответа».
+
+## LM Studio
+
+Вместо Ollama подойдёт LM Studio или другой сервер с OpenAI-совместимым API.
+
+1. В LM Studio откройте Developer и нажмите Start Server. Порт по умолчанию
+   1234. «Serve on Local Network» включайте, только если менеджер работает на
+   другом компьютере.
+2. Загрузите модель и скопируйте её id, который показывает LM Studio, например
+   `qwen2.5-7b-instruct`.
+3. В панели: «Сервер модели» — «Определять сам», адрес
+   `http://127.0.0.1:1234`, модель — скопированный id. Сохраните и нажмите
+   «Проверить подключение». Тип сервера должен быть «OpenAI-совместимый».
+
+Если модель не загружена, проверка покажет «не загружена» и id, которые
+отдаёт сервер. Ошибку сервера проверка показывает с кодом HTTP и началом ответа.
 
 ## Поле команд
 
@@ -97,9 +115,9 @@
 Two optional helpers on top of the planner, both off by default. The command
 box turns a phrase like "progress to iron tools" into a plan for the bots. The
 dispatcher reads a summary of each running project every 90 s and says what is
-going on and what to change. The model runs in Ollama on the same computer,
-default address `http://127.0.0.1:11434`. The manager calls no cloud model and
-stores no keys.
+going on and what to change. The model runs in Ollama or LM Studio on the same
+computer, default address `http://127.0.0.1:11434`. The manager calls no cloud
+model. An API key is only for a remote server that checks one.
 
 The AI does not hand out work: the planner still does that every 5 s. Without
 Ollama the panel and the bots behave as with the AI switched off.
@@ -118,14 +136,34 @@ Ollama the panel and the bots behave as with the AI switched off.
 | Setting | Default | What it does |
 |---|---|---|
 | `ai.enabled` | off | shows the command box and the dispatcher |
-| `ai.endpoint` | `http://127.0.0.1:11434` | Ollama address |
-| `ai.model` | `qwen2.5:7b-instruct` | model name in Ollama |
+| `ai.provider` | Detect | Ollama, LM Studio or another OpenAI-compatible server |
+| `ai.endpoint` | `http://127.0.0.1:11434` | model server address, a trailing `/v1` is fine |
+| `ai.model` | `qwen2.5:7b-instruct` | model name in Ollama or its id in LM Studio |
+| `ai.apiKey` | empty | key for a remote server, never logged |
 | `ai.timeoutSec` | 30 s | how long to wait for one answer |
 | `ai.superviseSec` | 90 s | how often the dispatcher reviews each running project |
 | `ai.mode` | Suggest | dispatcher actions wait for your decision, or apply at once |
 
 The first request after Ollama starts takes longer: the model is loaded into
 memory. If it does not fit into 30 s, raise "Answer timeout".
+
+## LM Studio
+
+LM Studio or any other server with an OpenAI-compatible API works instead of
+Ollama.
+
+1. In LM Studio open Developer and press Start Server. The default port is
+   1234. Turn on "Serve on Local Network" only if the manager runs on another
+   computer.
+2. Load the model and copy the id LM Studio shows for it, for example
+   `qwen2.5-7b-instruct`.
+3. In the panel: Model server Detect, address `http://127.0.0.1:1234`, model
+   the copied id. Save and press Check connection. The server type should be
+   "OpenAI-compatible".
+
+If the model is not loaded, the check says "not loaded" and lists the ids the
+server offers. A server error shows with its HTTP status and the start of the
+answer.
 
 ## Command box
 

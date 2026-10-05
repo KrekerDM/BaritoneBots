@@ -335,9 +335,10 @@ export function connectionBox() {
     const pairs = [[t("ai.conn.endpoint"), h("span", { class: "mono" }, s.endpoint || "")]];
     if (s.reachable) {
       pairs.push([t("ai.conn.state"), h("span", { class: "st-ok" }, t("ai.conn.ok"))]);
+      pairs.push([t("ai.conn.provider"), t("ai.conn.provider." + (s.provider === "openai" ? "openai" : "ollama"))]);
       pairs.push([
         t("ai.conn.model"),
-        h("span", null, h("span", { class: "mono" }, s.model), " ", s.modelPresent ? h("span", { class: "st-ok" }, t("ai.conn.modelOk")) : h("span", { class: "st-warn" }, t("ai.conn.modelMissing", { model: s.model }))),
+        h("span", null, h("span", { class: "mono" }, s.model), " ", s.modelPresent ? h("span", { class: "st-ok" }, t("ai.conn.modelOk")) : h("span", { class: "st-warn" }, t(s.provider === "openai" ? "ai.conn.modelNotLoaded" : "ai.conn.modelMissing", { model: s.model }))),
       ]);
       pairs.push([t("ai.conn.models"), h("span", null, num((s.models || []).length), (s.models || []).length ? h("div", { class: "mono dim small" }, s.models.join(", ")) : null)]);
     } else {

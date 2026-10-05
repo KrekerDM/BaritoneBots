@@ -31,6 +31,8 @@ public final class SettingsSchema {
     public static final List<String> STEP_PRIORITIES = List.of("normal", "high");
     /** {@code ai.mode}: supervisor actions wait for a click, or apply at once (SPEC §5.7d). */
     public static final List<String> AI_MODES = List.of("suggest", "auto");
+    /** {@code ai.provider}: detect the model server, or force Ollama's own API or the OpenAI-compatible one. */
+    public static final List<String> AI_PROVIDERS = List.of("auto", "ollama", "openai");
     /** Container roles a standing order may deliver into (besides {@code sorted:<category>} and container ids). */
     public static final List<String> ORDER_ROLES = List.of("storage", "supply", "kit", "fuel", "inbox");
     /** Xmx per bot for {@code runtime.memoryPreset}; {@code custom} uses {@code runtime.memoryMb}. */
@@ -435,8 +437,10 @@ public final class SettingsSchema {
     /** Optional local AI through Ollama (SPEC §5.7c command box, §5.7d supervisor); off by default. */
     private static void ai(List<SchemaField> l) {
         l.add(f("ai.enabled", BOOL, false));
+        l.add(choice("ai.provider", ENUM, "auto", AI_PROVIDERS));
         l.add(f("ai.endpoint", STRING, "http://127.0.0.1:11434"));
         l.add(f("ai.model", STRING, "qwen2.5:7b-instruct"));
+        l.add(f("ai.apiKey", SECRET, ""));
         l.add(num("ai.timeoutSec", INT, 30, 1, 600, "s"));
         l.add(num("ai.superviseSec", INT, 90, 15, 3600, "s"));
         l.add(choice("ai.mode", ENUM, "suggest", AI_MODES));

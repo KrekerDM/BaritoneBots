@@ -196,25 +196,48 @@ public record ManagerConfig(General general, RuntimeCfg runtime, List<ServerProf
     }
 
     /**
-     * Optional local AI (SPEC §5.7c / §5.7d): Ollama endpoint and model, request timeout, supervisor interval and
-     * whether supervisor actions wait for a click ({@code suggest}) or apply at once ({@code auto}).
+     * Optional local AI (SPEC §5.7c / §5.7d): model server ({@code auto}, {@code ollama} or an OpenAI-compatible one such
+     * as LM Studio), endpoint, model, optional API key, request timeout, supervisor interval and whether supervisor
+     * actions wait for a click ({@code suggest}) or apply at once ({@code auto}).
      */
-    public record AiCfg(boolean enabled, String endpoint, String model, int timeoutSec, int superviseSec, String mode) {
+    public record AiCfg(boolean enabled, String endpoint, String model, int timeoutSec, int superviseSec, String mode,
+                        String provider, String apiKey) {
         public static final String SUGGEST = "suggest";
         public static final String AUTO = "auto";
+        public static final String OLLAMA = "ollama";
+        public static final String OPENAI = "openai";
+
+        public AiCfg {
+            provider = provider == null || provider.isBlank() ? AUTO : provider;
+            apiKey = apiKey == null ? "" : apiKey.trim();
+        }
 
         public static AiCfg defaults() {
-            return new AiCfg(false, "http://127.0.0.1:11434", "qwen2.5:7b-instruct", 30, 90, SUGGEST);
+            return new AiCfg(false, "http://127.0.0.1:11434", "qwen2.5:7b-instruct", 30, 90, SUGGEST, AUTO, "");
         }
 
         public boolean auto() {
             return AUTO.equals(mode);
         }
 
-        /** The endpoint without a trailing slash. */
+        /** The endpoint without a trailing slash or {@code /v1}: both APIs add their own paths. */
         public String base() {
             String e = endpoint == null || endpoint.isBlank() ? defaults().endpoint() : endpoint.trim();
-            return e.endsWith("/") ? e.substring(0, e.length() - 1) : e;
+            while (e.endsWith("/")) {
+                e = e.substring(0, e.length() - 1);
+            }
+            if (e.toLowerCase(java.util.Locale.ROOT).endsWith("/v1")) {
+                e = e.substring(0, e.length() - 3);
+            }
+            return e;
+        }
+
+        /** Never prints the API key. */
+        @Override
+        public String toString() {
+            return "AiCfg[enabled=" + enabled + ", endpoint=" + endpoint + ", model=" + model + ", provider=" + provider
+                    + ", apiKey=" + (apiKey.isEmpty() ? "" : "***") + ", timeoutSec=" + timeoutSec + ", superviseSec="
+                    + superviseSec + ", mode=" + mode + "]";
         }
     }
 

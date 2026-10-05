@@ -46,22 +46,63 @@ public final class AiService {
     }
 
     private final Manager m;
-    private final OllamaClient client;
+    /** The provider {@code auto} found for these settings; dropped when they change. */
+    private record Detected(ManagerConfig.AiCfg cfg, AiClient client) {
+    }
+
+    private final OllamaClient ollama;
+    private final OpenAiClient openai;
+    private volatile Detected detected;
     private final Supervisor supervisor;
     private final Map<String, StoredPlan> plans = new LinkedHashMap<>();
 
     public AiService(Manager m) {
-        this(m, new OllamaClient());
-    }
-
-    AiService(Manager m, OllamaClient client) {
         this.m = m;
-        this.client = client;
+        this.ollama = new OllamaClient();
+        this.openai = new OpenAiClient();
         this.supervisor = new Supervisor(m, this);
     }
 
-    OllamaClient client() {
-        return client;
+    /** One model round through the configured or detected server (any thread). */
+    CompletableFuture<JsonObject> chat(ManagerConfig.AiCfg c, String system, String user, JsonObject schema) {
+        return client(c).thenCompose(cl -> cl.chat(c, system, user, schema));
+    }
+
+    /** The client for {@code ai.provider}; {@code auto} probes the server once and keeps the answer for these settings. */
+    CompletableFuture<AiClient> client(ManagerConfig.AiCfg c) {
+        if (ManagerConfig.AiCfg.OLLAMA.equals(c.provider())) {
+            return CompletableFuture.completedFuture(ollama);
+        }
+        if (ManagerConfig.AiCfg.OPENAI.equals(c.provider())) {
+            return CompletableFuture.completedFuture(openai);
+        }
+        Detected d = detected;
+        return d != null && d.cfg().equals(c) ? CompletableFuture.completedFuture(d.client()) : detect(c);
+    }
+
+    /**
+     * {@code auto}: {@code GET /v1/models} answering 200 means an OpenAI-compatible server such as LM Studio, unless
+     * {@code GET /api/tags} lists models too: Ollama serves both, and its own API keeps the 8k context window.
+     */
+    private CompletableFuture<AiClient> detect(ManagerConfig.AiCfg c) {
+        return openai.models(c, STATUS_TIMEOUT_SEC).handle((ids, err) -> err)
+                .thenCompose(oaErr -> ollama.models(c, STATUS_TIMEOUT_SEC).handle((names, olErr) -> {
+                    if (olErr != null && oaErr != null) {
+                        throw new CompletionException(detectError(unwrap(oaErr), unwrap(olErr)));
+                    }
+                    AiClient pick = olErr == null ? ollama : openai;
+                    detected = new Detected(c, pick);
+                    return pick;
+                }));
+    }
+
+    /** Neither API answered: one message when both failed the same way, else both reasons. */
+    static AiException detectError(AiException oa, AiException ol) {
+        if (oa.code().equals(ol.code()) && !AiException.HTTP.equals(ol.code())) {
+            return ol;
+        }
+        String code = AiException.UNREACHABLE.equals(oa.code()) ? ol.code() : oa.code();
+        return new AiException(code, "GET /v1/models: " + oa.getMessage() + "; GET /api/tags: " + ol.getMessage());
     }
 
     private ManagerConfig.AiCfg cfg() {
@@ -80,12 +121,13 @@ public final class AiService {
     /** For {@code GET /api/state} and SSE {@code ai} {@code {type:"status"}}. */
     public JsonObject brief() {
         ManagerConfig.AiCfg c = cfg();
-        return Json.obj("enabled", c.enabled(), "mode", c.mode(), "model", c.model(), "timeoutSec", c.timeoutSec(),
-                "superviseSec", c.superviseSec());
+        return Json.obj("enabled", c.enabled(), "mode", c.mode(), "provider", c.provider(), "model", c.model(),
+                "timeoutSec", c.timeoutSec(), "superviseSec", c.superviseSec());
     }
 
     public void onConfigChanged(ManagerConfig old, ManagerConfig nu) {
         if (old == null || !old.ai().equals(nu.ai())) {
+            detected = null;
             JsonObject o = brief();
             o.addProperty("type", "status");
             m.sse.broadcast(SseHub.AI, o);
@@ -116,24 +158,45 @@ public final class AiService {
 
     // ------------------------------------------------------------------ connection check
 
-    /** {@code GET /api/ai/status}: is the endpoint up, which models it has, is ours among them (works while off too). */
+    /**
+     * {@code GET /api/ai/status}: which server answers ({@code provider}; {@code auto} probes again), which models it
+     * offers, is ours among them; on failure the reason with the HTTP status and the start of the body (works while
+     * off too).
+     */
     public CompletableFuture<JsonObject> status() {
         ManagerConfig.AiCfg c = cfg();
         JsonObject base = brief();
         base.addProperty("endpoint", c.base());
-        return client.tags(c.base(), STATUS_TIMEOUT_SEC).handle((models, err) -> {
+        CompletableFuture<AiClient> pick = ManagerConfig.AiCfg.AUTO.equals(c.provider()) ? detect(c) : client(c);
+        return pick.thenCompose(cl -> cl.models(c, STATUS_TIMEOUT_SEC).thenApply(models -> {
             JsonObject o = base.deepCopy();
-            if (err != null) {
-                AiException e = unwrap(err);
-                o.addProperty("reachable", false);
-                o.add("error", Json.obj("code", e.code(), "message", e.getMessage()));
-                return o;
-            }
+            o.addProperty("provider", cl.provider());
             o.addProperty("reachable", true);
             o.add("models", Json.arrOf(models));
-            o.addProperty("modelPresent", models.stream().anyMatch(n -> sameModel(n, c.model())));
+            boolean present = models.stream().anyMatch(n -> sameModel(n, c.model()));
+            o.addProperty("modelPresent", present);
+            if (!present) {
+                o.addProperty("message", modelMissing(cl.provider(), c.model(), models));
+            }
             return o;
+        })).handle((o, err) -> {
+            if (err == null) {
+                return o;
+            }
+            AiException e = unwrap(err);
+            JsonObject f = base.deepCopy();
+            f.addProperty("reachable", false);
+            f.add("error", Json.obj("code", e.code(), "message", e.getMessage()));
+            return f;
         });
+    }
+
+    static String modelMissing(String provider, String model, List<String> models) {
+        String have = models.isEmpty() ? "none" : String.join(", ", models);
+        return ManagerConfig.AiCfg.OPENAI.equals(provider)
+                ? "model '" + model + "' is not loaded on the server (LM Studio: load it, or copy its exact id); available: "
+                + have
+                : "model '" + model + "' is not installed (ollama pull " + model + "); available: " + have;
     }
 
     /** {@code qwen2.5:7b-instruct} = {@code qwen2.5:7b-instruct}; {@code llama3} = {@code llama3:latest}. */
@@ -167,7 +230,7 @@ public final class AiService {
                 : "\nUse only these bots: " + String.join(", ", ctx.allowedBots().stream().sorted().toList()));
         long started = System.currentTimeMillis();
         CompletableFuture<JsonObject> result = new CompletableFuture<>();
-        client.chat(c.base(), c.model(), AiPrompts.planSystem(ctx), user, AiPrompts.planSchema(ctx), c.timeoutSec())
+        chat(c, AiPrompts.planSystem(ctx), user, AiPrompts.planSchema(ctx))
                 .whenComplete((out, err) -> m.loop.post(() -> {
                     if (err != null) {
                         result.completeExceptionally(unwrap(err).toApi());

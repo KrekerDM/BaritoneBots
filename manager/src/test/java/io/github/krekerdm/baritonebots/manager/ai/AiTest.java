@@ -35,6 +35,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -445,6 +446,7 @@ class AiTest {
 
         JsonObject ok = get(m.loop.await(() -> m.ai.status()));
         assertTrue(ok.get("reachable").getAsBoolean());
+        assertEquals("ollama", ok.get("provider").getAsString(), "auto: no /v1/models, /api/tags answers");
         assertTrue(ok.get("modelPresent").getAsBoolean());
         assertEquals(2, ok.getAsJsonArray("models").size());
 
@@ -474,14 +476,84 @@ class AiTest {
         assertFalse(m.loop.await(() -> m.stateSnapshot()).getAsJsonObject("ai").get("enabled").getAsBoolean());
     }
 
+    /** The model's answer as an OpenAI-compatible server wraps it: choices[0].message.content holds the JSON text. */
+    private static Answer openAi(String content) {
+        return new Answer(200, Json.toJson(Json.obj("object", "chat.completion", "choices", Json.arr(Json.obj("index", 0,
+                "message", Json.obj("role", "assistant", "content", content), "finish_reason", "stop")))), 0);
+    }
+
+    @Test
+    void openAiCompatibleServerIsDetectedAndUsedWithASchemaFallback() throws Exception {
+        AtomicReference<String> auth = new AtomicReference<>();
+        fake.createContext("/v1/models", ex -> {
+            auth.set(ex.getRequestHeaders().getFirst("Authorization"));
+            respond(ex, 200, "{\"object\":\"list\",\"data\":[{\"id\":\"qwen2.5-7b-instruct\",\"object\":\"model\"}]}");
+        });
+        fake.createContext("/v1/chat/completions", this::chat);
+        JsonObject both = get(m.loop.await(() -> m.ai.status()));
+        assertEquals("ollama", both.get("provider").getAsString(), "Ollama serves both APIs: its own one is kept");
+
+        // LM Studio: 200 with an error object on Ollama's paths, the endpoint typed with /v1/
+        fake.removeContext("/api/tags");
+        fake.createContext("/api/tags", ex -> respond(ex, 200,
+                "{\"error\":\"Unexpected endpoint or method. (GET /api/tags)\"}"));
+        m.loop.awaitRun(() -> m.config.patch(Json.obj("ai", Json.obj("endpoint", "http://127.0.0.1:" + port + "/v1/",
+                "model", "qwen2.5-7b-instruct", "apiKey", "sk-test-key"))));
+        JsonObject st = get(m.loop.await(() -> m.ai.status()));
+        assertEquals("openai", st.get("provider").getAsString());
+        assertEquals("http://127.0.0.1:" + port, st.get("endpoint").getAsString());
+        assertTrue(st.get("modelPresent").getAsBoolean());
+        assertEquals("Bearer sk-test-key", auth.get());
+        assertFalse(m.loop.await(() -> m.config.get().ai()).toString().contains("sk-test-key"), "the key is never printed");
+
+        JsonObject planJson = Json.obj("steps", Json.arr(
+                step("bot1", "obtain", Json.obj("item", "minecraft:iron_ingot", "count", 64))));
+        answers.add(openAi(Json.toJson(planJson)));
+        JsonObject p = plan("собери железо");
+        assertTrue(p.has("id"));
+        assertEquals(List.of(), reasons(p));
+        JsonObject req = requests.get(requests.size() - 1);
+        assertEquals("json_schema", req.getAsJsonObject("response_format").get("type").getAsString());
+        assertTrue(req.getAsJsonObject("response_format").getAsJsonObject("json_schema").get("strict").getAsBoolean());
+        assertEquals("qwen2.5-7b-instruct", req.get("model").getAsString());
+        assertTrue(req.has("temperature") && req.has("max_tokens"));
+
+        answers.add(new Answer(400, "{\"error\":{\"message\":\"response_format json_schema is not supported\"}}", 0));
+        answers.add(openAi("```json\n" + Json.toJson(planJson) + "\n```"));
+        int before = requests.size();
+        assertEquals(List.of(), reasons(plan("собери железо")));
+        assertEquals(before + 2, requests.size());
+        JsonObject retry = requests.get(requests.size() - 1);
+        assertEquals("json_object", retry.getAsJsonObject("response_format").get("type").getAsString());
+        assertTrue(retry.getAsJsonArray("messages").get(0).getAsJsonObject().get("content").getAsString()
+                .contains("JSON schema"), "the schema moves into the system prompt");
+
+        m.loop.awaitRun(() -> m.config.patch(Json.obj("ai", Json.obj("model", "llama-3.1-8b-instruct"))));
+        JsonObject missing = get(m.loop.await(() -> m.ai.status()));
+        assertTrue(missing.get("reachable").getAsBoolean());
+        assertFalse(missing.get("modelPresent").getAsBoolean());
+        String msg = missing.get("message").getAsString();
+        assertTrue(msg.contains("not loaded") && msg.contains("qwen2.5-7b-instruct"), msg);
+
+        fake.removeContext("/v1/models");
+        fake.createContext("/v1/models", ex -> respond(ex, 502, "<html>Bad Gateway from the proxy</html>"));
+        m.loop.awaitRun(() -> m.config.patch(Json.obj("ai", Json.obj("provider", "openai"))));
+        JsonObject bad = get(m.loop.await(() -> m.ai.status()));
+        assertFalse(bad.get("reachable").getAsBoolean());
+        assertEquals("HTTP 502: <html>Bad Gateway from the proxy</html>",
+                bad.getAsJsonObject("error").get("message").getAsString(), "a real reason instead of a bare 502");
+    }
+
     @Test
     void settingsHaveDefaultsAndAreValidated() {
         var ai = m.loop.await(() -> m.config.get().ai());
         assertEquals("qwen2.5:7b-instruct", ai.model());
         assertEquals(90, ai.superviseSec());
         assertEquals("suggest", ai.mode());
+        assertEquals("auto", ai.provider());
+        assertEquals("", ai.apiKey());
         for (JsonObject bad : List.of(Json.obj("endpoint", "ftp://127.0.0.1:11434"), Json.obj("endpoint", "localhost"),
-                Json.obj("mode", "yolo"), Json.obj("timeoutSec", 0))) {
+                Json.obj("mode", "yolo"), Json.obj("timeoutSec", 0), Json.obj("provider", "gpt"))) {
             assertThrows(ValidationException.class, () -> m.loop.awaitRun(() -> m.config.patch(Json.obj("ai", bad))),
                     bad.toString());
         }

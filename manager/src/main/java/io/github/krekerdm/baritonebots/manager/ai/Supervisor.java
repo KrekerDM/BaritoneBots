@@ -224,8 +224,7 @@ final class Supervisor {
         AiContext ctx = AiContext.capture(m, null, p.bots);
         String user = "Trigger: " + trigger + "\nDigest:\n" + Json.toJson(digest(p, now));
         String pid = p.id;
-        ai.client().chat(c.base(), c.model(), AiPrompts.superviseSystem(ctx), user, AiPrompts.superviseSchema(ctx),
-                        c.timeoutSec())
+        ai.chat(c, AiPrompts.superviseSystem(ctx), user, AiPrompts.superviseSchema(ctx))
                 .whenComplete((out, err) -> m.loop.post(() -> finish(pid, trigger, out, err)));
     }
 
