@@ -20,6 +20,8 @@ through Baritone. You control them from a web panel on the PC that runs the
 bots. Pick what should happen — "build this schematic", "keep 128 torches in
 storage", "progress to iron" — and the manager splits the work between bots.
 
+![Panel: bots in game](docs/screenshot-bots.png)
+
 ## What it does
 
 - **27 bot tasks**: walking, following, mining, farming, clearing, filling
@@ -43,6 +45,15 @@ storage", "progress to iron" — and the manager splits the work between bots.
   and only takes ore it can see.
 - **Companion plugin** for your own server: token check for bots, block journal
   with rollback, AuthMe/nLogin auto-login. Everything else works without it.
+
+
+## What it looks like
+
+![Bot page: quick actions, status, queue](docs/screenshot-bot.png)
+
+![Project: sectors, materials, assignments](docs/screenshot-project.png)
+
+![Automation: autopilot, standing orders, schedules, rules](docs/screenshot-automation.png)
 
 ## Warning
 
