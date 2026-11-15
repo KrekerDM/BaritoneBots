@@ -23,10 +23,10 @@
   /* Hover on the light primary button; pure white jumps next to --text. */
   --lift: rgb(244 246 248);
 
-  /* States by brightness, not by hue: ok reads as ordinary text, warn
-     as the brightest grey, bad in the one colour. */
+  /* Ok reads as ordinary text. A warning and an error are both
+     deviations, so both take the one colour. */
   --ok: var(--text-soft);
-  --warn: var(--text);
+  --warn: var(--accent);
   --bad: var(--accent);
 
   --font: "Golos Text", system-ui, sans-serif;
@@ -237,7 +237,7 @@ p {
 }
 
 .brand {
-  font-weight: 500;
+  font-weight: 400;
   color: var(--text);
   text-decoration: none;
 }
@@ -336,7 +336,7 @@ main {
 .h3 {
   font-size: var(--t-body);
   line-height: 1.4;
-  font-weight: 500;
+  font-weight: 400;
   color: var(--text);
 }
 
@@ -368,7 +368,7 @@ main {
 }
 
 .strong {
-  font-weight: 500;
+  font-weight: 400;
   color: var(--text);
 }
 
@@ -674,7 +674,7 @@ progress::-moz-progress-bar {
 
 .table th {
   font-size: var(--t-small);
-  font-weight: 500;
+  font-weight: 400;
   color: var(--text-dim);
   text-align: left;
   padding: var(--s-2);
@@ -713,6 +713,11 @@ progress::-moz-progress-bar {
 .bots-table th {
   white-space: normal;
   overflow-wrap: normal;
+}
+
+.bots-table th,
+.bots-table td {
+  padding-inline: var(--s-1);
 }
 
 .bots-table .num-threshold {
@@ -776,10 +781,12 @@ progress::-moz-progress-bar {
   border-top: 1px solid var(--hairline);
 }
 
-/* The code in the one colour says it is an error; a bar beside the box
-   would only have marked the importance instead of writing it. */
+/* Framed in the one colour, so a box says "error" even when it has no
+   code to show. No bar beside it: a bar marks importance, a frame
+   outlines the thing itself. */
 .error-box {
   padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--bad);
   background: var(--raised);
   font-size: var(--t-small);
   color: var(--text-soft);
@@ -854,8 +861,9 @@ progress::-moz-progress-bar {
   text-decoration: none;
 }
 
+/* --raised, not --hover: the dim counts inside the link are 4.37:1 there. */
 .list a:hover {
-  background: var(--hover);
+  background: var(--raised);
 }
 
 .list a[aria-current="page"] {
@@ -903,10 +911,11 @@ progress::-moz-progress-bar {
 }
 
 /* Sector states by brightness, with the one colour for a blocked
-   sector: waiting is darkest, done is mid grey, the active one is the
-   brightest. Each label takes the ink that reads on its own fill. */
+   sector: waiting is an outline, done is mid grey, the active one is
+   the brightest. Each label takes the ink that reads on its own fill. */
 .sec-pending {
-  fill: var(--hover);
+  fill: var(--ground);
+  stroke: var(--text-dim);
 }
 
 .sec-done {
@@ -943,7 +952,8 @@ progress::-moz-progress-bar {
 }
 
 .swatch.sec-pending {
-  background: var(--hover);
+  background: var(--ground);
+  border: 1px solid var(--text-dim);
 }
 
 .swatch.sec-active {
